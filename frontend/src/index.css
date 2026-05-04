@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    @apply bg-dark-900 text-slate-100;
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-dark-800;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-dark-500 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-blue-600;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-dark-800 border border-dark-600 rounded-xl;
+  }
+
+  .btn {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-150 cursor-pointer;
+  }
+
+  .btn-primary {
+    @apply btn bg-blue-600 hover:bg-blue-500 text-white;
+  }
+
+  .btn-secondary {
+    @apply btn bg-dark-700 hover:bg-dark-600 text-slate-200 border border-dark-500;
+  }
+
+  .btn-danger {
+    @apply btn bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-600/30;
+  }
+
+  .btn-success {
+    @apply btn bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 border border-emerald-600/30;
+  }
+
+  .input {
+    @apply w-full bg-dark-700 border border-dark-500 rounded-lg px-3 py-2 text-sm text-slate-100
+           placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30
+           transition-colors;
+  }
+
+  .label {
+    @apply block text-xs font-medium text-slate-400 mb-1;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .table-row {
+    @apply border-b border-dark-600 hover:bg-dark-700/50 transition-colors;
+  }
+
+  .stat-card {
+    @apply card p-5 flex items-start gap-4;
+  }
+
+  .page-header {
+    @apply flex items-center justify-between mb-6;
+  }
+
+  .page-title {
+    @apply text-2xl font-bold text-white;
+  }
+}
+
+/* Calendar */
+.shift-chip {
+  @apply text-xs px-1.5 py-0.5 rounded font-medium truncate cursor-pointer transition-opacity hover:opacity-80;
+}
+
+/* Modal overlay */
+.modal-overlay {
+  @apply fixed inset-0 z-50 flex items-center justify-center p-4;
+  background: rgba(5, 7, 17, 0.85);
+  backdrop-filter: blur(4px);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
