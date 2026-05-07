@@ -1,5 +1,18 @@
-// En production (Vercel), pointe vers le backend Railway via VITE_API_URL
+// VITE_API_URL est injectée au BUILD TIME par Vercel.
+// Si absente → fallback '/api' (dev local via proxy Vite uniquement).
 const BASE = import.meta.env.VITE_API_URL || '/api';
+
+if (import.meta.env.PROD && !import.meta.env.VITE_API_URL) {
+  console.error(
+    '[SecuritySaaS] ⚠️  VITE_API_URL non définie au build.\n' +
+    'Toutes les requêtes vont sur /api (Vercel) au lieu de Railway.\n' +
+    'Dans Vercel → Settings → Environment Variables, ajoute :\n' +
+    '  VITE_API_URL = https://TON_APP.up.railway.app/api\n' +
+    'puis redéploie.'
+  );
+}
+
+export const API_BASE_URL = BASE;
 
 async function request(method, path, body) {
   const res = await fetch(`${BASE}${path}`, {
