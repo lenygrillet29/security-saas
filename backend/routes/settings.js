@@ -1,30 +1,42 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../db/database');
+const { db } = require('../db/database');
 
-router.get('/', (req, res) => {
-  const rows = db.prepare('SELECT key, value FROM settings').all();
-  const settings = Object.fromEntries(rows.map(r => [r.key, r.value]));
-  // Don't expose SMTP password
-  const safe = { ...settings };
-  delete safe.smtp_pass;
-  res.json(safe);
+router.get('/', async (req, res) => {
+  try {
+    const rows = await db.all('SELECT key, value FROM settings');
+    const settings = Object.fromEntries(rows.map(r => [r.key, r.value]));
+    const safe = { ...settings };
+    delete safe.smtp_pass;
+    res.json(safe);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.get('/all', (req, res) => {
-  const rows = db.prepare('SELECT key, value FROM settings').all();
-  res.json(Object.fromEntries(rows.map(r => [r.key, r.value])));
+router.get('/all', async (req, res) => {
+  try {
+    const rows = await db.all('SELECT key, value FROM settings');
+    res.json(Object.fromEntries(rows.map(r => [r.key, r.value])));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.put('/', (req, res) => {
-  const update = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
-  const updateMany = db.transaction((obj) => {
-    for (const [key, value] of Object.entries(obj)) {
-      update.run(key, value ?? '');
+router.put('/', async (req, res) => {
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const [key, value] of Object.entries(req.body)) {
+      await client.query(
+        'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value',
+        [key, value ?? '']
+      );
     }
-  });
-  updateMany(req.body);
-  res.json({ success: true });
+    await client.query('COMMIT');
+    client.release();
+    res.json({ success: true });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    client.release();
+    res.status(500).json({ error: e.message });
+  }
 });
 
 module.exports = router;

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../db/database');
+const { db } = require('../db/database');
 
 const ABSENCES_QUERY = `
   SELECT ab.*, a.first_name, a.last_name, a.color as agent_color
@@ -8,53 +8,65 @@ const ABSENCES_QUERY = `
   JOIN agents a ON ab.agent_id = a.id
 `;
 
-router.get('/', (req, res) => {
-  const { agent_id, start_date, end_date, type, status } = req.query;
-  let query = ABSENCES_QUERY + ' WHERE 1=1';
-  const params = [];
+router.get('/', async (req, res) => {
+  try {
+    const { agent_id, start_date, end_date, type, status } = req.query;
+    let query = ABSENCES_QUERY + ' WHERE 1=1';
+    const params = [];
 
-  if (agent_id) { query += ' AND ab.agent_id = ?'; params.push(agent_id); }
-  if (start_date) { query += ' AND ab.end_date >= ?'; params.push(start_date); }
-  if (end_date) { query += ' AND ab.start_date <= ?'; params.push(end_date); }
-  if (type) { query += ' AND ab.type = ?'; params.push(type); }
-  if (status) { query += ' AND ab.status = ?'; params.push(status); }
-  query += ' ORDER BY ab.start_date DESC';
+    if (agent_id) { query += ' AND ab.agent_id = ?'; params.push(agent_id); }
+    if (start_date) { query += ' AND ab.end_date >= ?'; params.push(start_date); }
+    if (end_date) { query += ' AND ab.start_date <= ?'; params.push(end_date); }
+    if (type) { query += ' AND ab.type = ?'; params.push(type); }
+    if (status) { query += ' AND ab.status = ?'; params.push(status); }
+    query += ' ORDER BY ab.start_date DESC';
 
-  res.json(db.prepare(query).all(...params));
+    res.json(await db.all(query, params));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.get('/:id', (req, res) => {
-  const absence = db.prepare(ABSENCES_QUERY + ' WHERE ab.id = ?').get(req.params.id);
-  if (!absence) return res.status(404).json({ error: 'Absence non trouvée' });
-  res.json(absence);
+router.get('/:id', async (req, res) => {
+  try {
+    const absence = await db.get(ABSENCES_QUERY + ' WHERE ab.id = ?', [req.params.id]);
+    if (!absence) return res.status(404).json({ error: 'Absence non trouvée' });
+    res.json(absence);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/', (req, res) => {
-  const { agent_id, start_date, end_date, type, status, notes } = req.body;
-  if (!agent_id || !start_date || !end_date || !type)
-    return res.status(400).json({ error: 'Champs requis manquants' });
-  const result = db.prepare(
-    `INSERT INTO absences (agent_id, start_date, end_date, type, status, notes)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  ).run(agent_id, start_date, end_date, type, status || 'approved', notes || null);
-  res.status(201).json(db.prepare(ABSENCES_QUERY + ' WHERE ab.id = ?').get(result.lastInsertRowid));
+router.post('/', async (req, res) => {
+  try {
+    const { agent_id, start_date, end_date, type, status, notes } = req.body;
+    if (!agent_id || !start_date || !end_date || !type)
+      return res.status(400).json({ error: 'Champs requis manquants' });
+    const result = await db.insert(
+      `INSERT INTO absences (agent_id, start_date, end_date, type, status, notes)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [agent_id, start_date, end_date, type, status || 'approved', notes || null]
+    );
+    res.status(201).json(await db.get(ABSENCES_QUERY + ' WHERE ab.id = ?', [result.lastInsertRowid]));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.put('/:id', (req, res) => {
-  const { agent_id, start_date, end_date, type, status, notes } = req.body;
-  const existing = db.prepare('SELECT id FROM absences WHERE id = ?').get(req.params.id);
-  if (!existing) return res.status(404).json({ error: 'Absence non trouvée' });
-  db.prepare(
-    `UPDATE absences SET agent_id=?, start_date=?, end_date=?, type=?, status=?, notes=? WHERE id=?`
-  ).run(agent_id, start_date, end_date, type, status || 'approved', notes || null, req.params.id);
-  res.json(db.prepare(ABSENCES_QUERY + ' WHERE ab.id = ?').get(req.params.id));
+router.put('/:id', async (req, res) => {
+  try {
+    const { agent_id, start_date, end_date, type, status, notes } = req.body;
+    const existing = await db.get('SELECT id FROM absences WHERE id = ?', [req.params.id]);
+    if (!existing) return res.status(404).json({ error: 'Absence non trouvée' });
+    await db.run(
+      `UPDATE absences SET agent_id=?, start_date=?, end_date=?, type=?, status=?, notes=? WHERE id=?`,
+      [agent_id, start_date, end_date, type, status || 'approved', notes || null, req.params.id]
+    );
+    res.json(await db.get(ABSENCES_QUERY + ' WHERE ab.id = ?', [req.params.id]));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete('/:id', (req, res) => {
-  const existing = db.prepare('SELECT id FROM absences WHERE id = ?').get(req.params.id);
-  if (!existing) return res.status(404).json({ error: 'Absence non trouvée' });
-  db.prepare('DELETE FROM absences WHERE id = ?').run(req.params.id);
-  res.json({ success: true });
+router.delete('/:id', async (req, res) => {
+  try {
+    const existing = await db.get('SELECT id FROM absences WHERE id = ?', [req.params.id]);
+    if (!existing) return res.status(404).json({ error: 'Absence non trouvée' });
+    await db.run('DELETE FROM absences WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;
