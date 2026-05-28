@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { init } = require('./db/database');
+const { requireAuth } = require('./middleware/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -29,7 +30,15 @@ app.options('*', cors(corsOptions));
 app.use(cors(corsOptions));
 app.use(express.json());
 
-// Routes
+// ─── Routes publiques ─────────────────────────────────────────────────────────
+app.use('/api/auth', require('./routes/auth'));
+
+app.get('/api/health', (req, res) =>
+  res.json({ status: 'ok', node: process.version, db: 'postgresql' })
+);
+
+// ─── Routes protégées (JWT requis) ────────────────────────────────────────────
+app.use('/api', requireAuth);
 app.use('/api/agents',   require('./routes/agents'));
 app.use('/api/clients',  require('./routes/clients'));
 app.use('/api/sites',    require('./routes/sites'));
@@ -40,10 +49,7 @@ app.use('/api/pdf',      require('./routes/pdf'));
 app.use('/api/email',    require('./routes/email'));
 app.use('/api/settings', require('./routes/settings'));
 
-app.get('/api/health', (req, res) =>
-  res.json({ status: 'ok', node: process.version, env: process.env.NODE_ENV || 'production', db: 'postgresql' })
-);
-
+// ─── Gestionnaire d'erreurs ───────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   const origin = req.headers.origin;
   if (origin) res.setHeader('Access-Control-Allow-Origin', origin);
@@ -52,16 +58,11 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ error: err.message || 'Erreur serveur' });
 });
 
-// Initialise la DB puis démarre le serveur
+// ─── Démarrage ────────────────────────────────────────────────────────────────
 init()
   .then(() => {
     app.listen(PORT, () => {
-      console.log(`SecuritySaaS API running on port ${PORT} (PostgreSQL)`);
-      if (allowedOrigins) {
-        console.log(`CORS autorisé pour : ${allowedOrigins.join(', ')} + *.vercel.app`);
-      } else {
-        console.log('CORS : toutes origines autorisées');
-      }
+      console.log(`SecuritySaaS API running on port ${PORT} (PostgreSQL, multi-tenant)`);
     });
   })
   .catch(err => {

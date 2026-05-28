@@ -1,7 +1,7 @@
 const { Pool } = require('pg');
 
 if (!process.env.DATABASE_URL) {
-  console.error('[DB] ⚠️  DATABASE_URL non définie. Connectez une base PostgreSQL Railway.');
+  console.error('[DB] ⚠️  DATABASE_URL non définie.');
 }
 
 const isRemote = process.env.DATABASE_URL && !process.env.DATABASE_URL.includes('localhost');
@@ -11,7 +11,6 @@ const pool = new Pool({
   ssl: isRemote ? { rejectUnauthorized: false } : false,
 });
 
-// Convertit les ? en $1, $2, ... pour pg
 function toPositional(sql) {
   let i = 0;
   return sql.replace(/\?/g, () => `$${++i}`);
@@ -35,7 +34,6 @@ const db = {
     return { changes: result.rowCount };
   },
 
-  // INSERT avec RETURNING id pour récupérer lastInsertRowid
   async insert(sql, params = []) {
     const sqlR = toPositional(sql) + ' RETURNING id';
     const { rows } = await pool.query(sqlR, params);
@@ -44,9 +42,39 @@ const db = {
 };
 
 async function init() {
+  // Tables socle multi-tenant
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS companies (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      phone TEXT,
+      siret TEXT,
+      address TEXT,
+      plan TEXT DEFAULT 'trial',
+      plan_status TEXT DEFAULT 'active',
+      stripe_customer_id TEXT,
+      stripe_subscription_id TEXT,
+      trial_ends_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      first_name TEXT NOT NULL,
+      last_name TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'gestionnaire',
+      active INTEGER DEFAULT 1,
+      last_login TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS agents (
       id SERIAL PRIMARY KEY,
+      company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
       first_name TEXT NOT NULL,
       last_name TEXT NOT NULL,
       email TEXT,
@@ -62,6 +90,7 @@ async function init() {
 
     CREATE TABLE IF NOT EXISTS clients (
       id SERIAL PRIMARY KEY,
+      company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       contact_name TEXT,
       email TEXT,
@@ -77,6 +106,7 @@ async function init() {
 
     CREATE TABLE IF NOT EXISTS sites (
       id SERIAL PRIMARY KEY,
+      company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
       client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE RESTRICT,
       name TEXT NOT NULL,
       address TEXT,
@@ -91,6 +121,7 @@ async function init() {
 
     CREATE TABLE IF NOT EXISTS shifts (
       id SERIAL PRIMARY KEY,
+      company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
       agent_id INTEGER NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
       site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE RESTRICT,
       date TEXT NOT NULL,
@@ -105,6 +136,7 @@ async function init() {
 
     CREATE TABLE IF NOT EXISTS absences (
       id SERIAL PRIMARY KEY,
+      company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
       agent_id INTEGER NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
       start_date TEXT NOT NULL,
       end_date TEXT NOT NULL,
@@ -116,6 +148,7 @@ async function init() {
 
     CREATE TABLE IF NOT EXISTS quotes (
       id SERIAL PRIMARY KEY,
+      company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
       client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE RESTRICT,
       site_id INTEGER REFERENCES sites(id) ON DELETE SET NULL,
       quote_number TEXT,
@@ -143,37 +176,38 @@ async function init() {
       rate_sunday REAL DEFAULT 0,
       total REAL DEFAULT 0
     );
-
-    CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY,
-      value TEXT
-    );
   `);
 
-  const defaults = [
-    ['company_name', 'Ma Société de Sécurité'],
-    ['company_address', ''],
-    ['company_email', ''],
-    ['company_phone', ''],
-    ['smtp_host', ''],
-    ['smtp_port', '587'],
-    ['smtp_user', ''],
-    ['smtp_pass', ''],
-    ['smtp_from', ''],
-    ['tva_rate', '20'],
-    ['hourly_rate_day', '18'],
-    ['hourly_rate_night', '22'],
-    ['hourly_rate_sunday', '25'],
-  ];
+  // Migration settings : recrée avec company_id si besoin
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'settings' AND column_name = 'company_id'
+      ) THEN
+        DROP TABLE IF EXISTS settings CASCADE;
+        CREATE TABLE settings (
+          company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+          key TEXT NOT NULL,
+          value TEXT,
+          PRIMARY KEY (company_id, key)
+        );
+      END IF;
+    END $$;
+  `);
 
-  for (const [key, value] of defaults) {
-    await pool.query(
-      'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING',
-      [key, value]
-    );
-  }
+  // ALTER TABLE pour les colonnes company_id manquantes sur DB existantes
+  await pool.query(`
+    ALTER TABLE agents   ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE;
+    ALTER TABLE clients  ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE;
+    ALTER TABLE sites    ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE;
+    ALTER TABLE shifts   ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE;
+    ALTER TABLE absences ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE;
+    ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE;
+  `);
 
-  console.log('[DB] PostgreSQL connecté et schéma initialisé');
+  console.log('[DB] PostgreSQL connecté — schéma multi-tenant initialisé');
 }
 
 module.exports = { db, init };

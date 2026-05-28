@@ -2,13 +2,10 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../db/database');
 const { sendEmail } = require('../utils/emailSender');
-const {
-  generateAgentPlanning,
-  generateQuote,
-} = require('../utils/pdfGenerator');
+const { generateAgentPlanning, generateQuote } = require('../utils/pdfGenerator');
 
-async function getSettings() {
-  const rows = await db.all('SELECT key, value FROM settings');
+async function getSettings(companyId) {
+  const rows = await db.all('SELECT key, value FROM settings WHERE company_id = ?', [companyId]);
   return Object.fromEntries(rows.map(r => [r.key, r.value]));
 }
 
@@ -25,16 +22,16 @@ function pdfToBuffer(doc) {
 router.post('/planning/agent/:id', async (req, res) => {
   try {
     const { start_date, end_date, to, subject, message } = req.body;
-    const settings = await getSettings();
-    const agent = await db.get('SELECT * FROM agents WHERE id = ?', [req.params.id]);
+    const agent = await db.get('SELECT * FROM agents WHERE id = ? AND company_id = ?', [req.params.id, req.user.companyId]);
     if (!agent) return res.status(404).json({ error: 'Agent non trouvé' });
 
     const shifts = await db.all(`
       SELECT sh.*, s.name as site_name FROM shifts sh JOIN sites s ON sh.site_id = s.id
-      WHERE sh.agent_id = ? AND sh.date >= ? AND sh.date <= ?
+      WHERE sh.agent_id = ? AND sh.company_id = ? AND sh.date >= ? AND sh.date <= ?
       ORDER BY sh.date
-    `, [req.params.id, start_date || '2000-01-01', end_date || '2099-12-31']);
+    `, [req.params.id, req.user.companyId, start_date || '2000-01-01', end_date || '2099-12-31']);
 
+    const settings = await getSettings(req.user.companyId);
     const doc = generateAgentPlanning(settings, agent, shifts, start_date, end_date);
     const pdfBuffer = await pdfToBuffer(doc);
 
@@ -51,13 +48,13 @@ router.post('/planning/agent/:id', async (req, res) => {
 router.post('/quote/:id', async (req, res) => {
   try {
     const { to, subject, message } = req.body;
-    const settings = await getSettings();
-    const quote = await db.get('SELECT * FROM quotes WHERE id = ?', [req.params.id]);
+    const quote = await db.get('SELECT * FROM quotes WHERE id = ? AND company_id = ?', [req.params.id, req.user.companyId]);
     if (!quote) return res.status(404).json({ error: 'Devis non trouvé' });
     const client = await db.get('SELECT * FROM clients WHERE id = ?', [quote.client_id]);
     const site = quote.site_id ? await db.get('SELECT * FROM sites WHERE id = ?', [quote.site_id]) : null;
     const lines = await db.all('SELECT * FROM quote_lines WHERE quote_id = ? ORDER BY id', [quote.id]);
 
+    const settings = await getSettings(req.user.companyId);
     const doc = generateQuote(settings, quote, client, site, lines);
     const pdfBuffer = await pdfToBuffer(doc);
 

@@ -1,25 +1,29 @@
-// VITE_API_URL est injectée au BUILD TIME par Vercel.
-// Si absente → fallback '/api' (dev local via proxy Vite uniquement).
 const BASE = import.meta.env.VITE_API_URL || '/api';
 
 if (import.meta.env.PROD && !import.meta.env.VITE_API_URL) {
-  console.error(
-    '[SecuritySaaS] ⚠️  VITE_API_URL non définie au build.\n' +
-    'Toutes les requêtes vont sur /api (Vercel) au lieu de Railway.\n' +
-    'Dans Vercel → Settings → Environment Variables, ajoute :\n' +
-    '  VITE_API_URL = https://TON_APP.up.railway.app/api\n' +
-    'puis redéploie.'
-  );
+  console.error('[SecuritySaaS] ⚠️  VITE_API_URL non définie au build.');
 }
 
 export const API_BASE_URL = BASE;
 
 async function request(method, path, body) {
+  const token = localStorage.getItem('auth_token');
+  const headers = {};
+  if (body) headers['Content-Type'] = 'application/json';
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
   const res = await fetch(`${BASE}${path}`, {
     method,
-    headers: body ? { 'Content-Type': 'application/json' } : {},
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
+
+  if (res.status === 401) {
+    localStorage.removeItem('auth_token');
+    window.location.href = '/login';
+    throw new Error('Session expirée');
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || 'Erreur serveur');
@@ -31,6 +35,18 @@ const get = (path) => request('GET', path);
 const post = (path, body) => request('POST', path, body);
 const put = (path, body) => request('PUT', path, body);
 const del = (path) => request('DELETE', path);
+
+// Auth
+export const authApi = {
+  register: (data) => post('/auth/register', data),
+  login: (data) => post('/auth/login', data),
+  me: () => get('/auth/me'),
+  changePassword: (data) => put('/auth/password', data),
+  getUsers: () => get('/auth/users'),
+  createUser: (data) => post('/auth/users', data),
+  updateUser: (id, data) => put(`/auth/users/${id}`, data),
+  deleteUser: (id) => del(`/auth/users/${id}`),
+};
 
 // Agents
 export const agentsApi = {
@@ -102,24 +118,31 @@ export const quotesApi = {
 // Settings
 export const settingsApi = {
   get: () => get('/settings'),
+  getAll: () => get('/settings/all'),
   update: (data) => put('/settings', data),
 };
 
-// PDF (open in new tab)
+// PDF (token passé en query string car window.open ne peut pas envoyer de header)
 export const pdfApi = {
   agentPlanning: (id, params) => {
-    const q = new URLSearchParams(params).toString();
+    const token = localStorage.getItem('auth_token');
+    const q = new URLSearchParams({ ...params, token }).toString();
     window.open(`${BASE}/pdf/planning/agent/${id}?${q}`, '_blank');
   },
   sitePlanning: (id, params) => {
-    const q = new URLSearchParams(params).toString();
+    const token = localStorage.getItem('auth_token');
+    const q = new URLSearchParams({ ...params, token }).toString();
     window.open(`${BASE}/pdf/planning/site/${id}?${q}`, '_blank');
   },
   clientPlanning: (id, params) => {
-    const q = new URLSearchParams(params).toString();
+    const token = localStorage.getItem('auth_token');
+    const q = new URLSearchParams({ ...params, token }).toString();
     window.open(`${BASE}/pdf/planning/client/${id}?${q}`, '_blank');
   },
-  quote: (id) => window.open(`${BASE}/pdf/quote/${id}`, '_blank'),
+  quote: (id) => {
+    const token = localStorage.getItem('auth_token');
+    window.open(`${BASE}/pdf/quote/${id}?token=${token}`, '_blank');
+  },
 };
 
 // Email

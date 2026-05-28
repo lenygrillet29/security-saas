@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../db/database');
+const { requireWriter } = require('../middleware/auth');
 const { calculateHours } = require('../utils/hoursCalculator');
 
 const SHIFTS_QUERY = `
@@ -14,7 +15,7 @@ const SHIFTS_QUERY = `
   JOIN clients c ON s.client_id = c.id
 `;
 
-// Stats doit être avant /:id pour ne pas être capturée par la route paramétrée
+// /stats/summary AVANT /:id
 router.get('/stats/summary', async (req, res) => {
   try {
     const { start_date, end_date } = req.query;
@@ -28,10 +29,10 @@ router.get('/stats/summary', async (req, res) => {
         COUNT(*) as shift_count
       FROM shifts sh
       JOIN agents a ON sh.agent_id = a.id
-      WHERE sh.date >= ? AND sh.date <= ?
+      WHERE sh.company_id = ? AND sh.date >= ? AND sh.date <= ?
       GROUP BY agent_id, a.first_name, a.last_name
       ORDER BY a.last_name
-    `, [start_date || '2000-01-01', end_date || '2099-12-31']);
+    `, [req.user.companyId, start_date || '2000-01-01', end_date || '2099-12-31']);
     res.json(rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -39,8 +40,8 @@ router.get('/stats/summary', async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const { agent_id, site_id, client_id, start_date, end_date } = req.query;
-    let query = SHIFTS_QUERY + ' WHERE 1=1';
-    const params = [];
+    let query = SHIFTS_QUERY + ' WHERE sh.company_id = ?';
+    const params = [req.user.companyId];
 
     if (agent_id) { query += ' AND sh.agent_id = ?'; params.push(agent_id); }
     if (site_id) { query += ' AND sh.site_id = ?'; params.push(site_id); }
@@ -55,13 +56,13 @@ router.get('/', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
   try {
-    const shift = await db.get(SHIFTS_QUERY + ' WHERE sh.id = ?', [req.params.id]);
+    const shift = await db.get(SHIFTS_QUERY + ' WHERE sh.id = ? AND sh.company_id = ?', [req.params.id, req.user.companyId]);
     if (!shift) return res.status(404).json({ error: 'Shift non trouvé' });
     res.json(shift);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', requireWriter, async (req, res) => {
   try {
     const { agent_id, site_id, date, start_time, end_time, notes } = req.body;
     if (!agent_id || !site_id || !date || !start_time || !end_time)
@@ -69,19 +70,19 @@ router.post('/', async (req, res) => {
 
     const hours = calculateHours(date, start_time, end_time);
     const result = await db.insert(
-      `INSERT INTO shifts (agent_id, site_id, date, start_time, end_time, hours_day, hours_night, hours_sunday, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [agent_id, site_id, date, start_time, end_time,
+      `INSERT INTO shifts (company_id, agent_id, site_id, date, start_time, end_time, hours_day, hours_night, hours_sunday, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [req.user.companyId, agent_id, site_id, date, start_time, end_time,
         hours.hours_day, hours.hours_night, hours.hours_sunday, notes || null]
     );
     res.status(201).json(await db.get(SHIFTS_QUERY + ' WHERE sh.id = ?', [result.lastInsertRowid]));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireWriter, async (req, res) => {
   try {
     const { agent_id, site_id, date, start_time, end_time, notes } = req.body;
-    const existing = await db.get('SELECT id FROM shifts WHERE id = ?', [req.params.id]);
+    const existing = await db.get('SELECT id FROM shifts WHERE id = ? AND company_id = ?', [req.params.id, req.user.companyId]);
     if (!existing) return res.status(404).json({ error: 'Shift non trouvé' });
 
     const hours = calculateHours(date, start_time, end_time);
@@ -95,9 +96,9 @@ router.put('/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireWriter, async (req, res) => {
   try {
-    const existing = await db.get('SELECT id FROM shifts WHERE id = ?', [req.params.id]);
+    const existing = await db.get('SELECT id FROM shifts WHERE id = ? AND company_id = ?', [req.params.id, req.user.companyId]);
     if (!existing) return res.status(404).json({ error: 'Shift non trouvé' });
     await db.run('DELETE FROM shifts WHERE id = ?', [req.params.id]);
     res.json({ success: true });
