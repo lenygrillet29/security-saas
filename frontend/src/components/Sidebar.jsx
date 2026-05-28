@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Calendar, Users, Building2,
   MapPin, FileText, Settings, Shield, ClipboardList,
-  LogOut, ChevronDown,
+  LogOut, ChevronDown, CreditCard,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
@@ -72,8 +72,21 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      {/* Bottom : settings + user */}
+      {/* Bottom : billing + settings + user */}
       <div className="px-3 pb-3 space-y-1 border-t border-dark-600 pt-3">
+        <NavLink
+          to="/billing"
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+              isActive
+                ? 'bg-blue-600/20 text-blue-400 border border-blue-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-dark-700'
+            }`
+          }
+        >
+          <CreditCard className="w-4 h-4 shrink-0" />
+          Abonnement
+        </NavLink>
         <NavLink
           to="/settings"
           className={({ isActive }) =>

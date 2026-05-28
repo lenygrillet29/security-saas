@@ -28,10 +28,14 @@ const corsOptions = {
 
 app.options('*', cors(corsOptions));
 app.use(cors(corsOptions));
+
+// Body brut pour le webhook Stripe (AVANT express.json)
+app.use('/api/billing/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 
 // ─── Routes publiques ─────────────────────────────────────────────────────────
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/billing/webhook', require('./routes/billing'));
 
 app.get('/api/health', (req, res) =>
   res.json({ status: 'ok', node: process.version, db: 'postgresql' })
@@ -48,6 +52,7 @@ app.use('/api/quotes',   require('./routes/quotes'));
 app.use('/api/pdf',      require('./routes/pdf'));
 app.use('/api/email',    require('./routes/email'));
 app.use('/api/settings', require('./routes/settings'));
+app.use('/api/billing', require('./routes/billing'));
 
 // ─── Gestionnaire d'erreurs ───────────────────────────────────────────────────
 app.use((err, req, res, next) => {

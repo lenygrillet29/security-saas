@@ -12,6 +12,7 @@ import Sites from './pages/Sites';
 import Absences from './pages/Absences';
 import Quotes from './pages/Quotes';
 import Settings from './pages/Settings';
+import Billing from './pages/Billing';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -54,6 +55,7 @@ export default function App() {
               <Route path="absences" element={<Absences />} />
               <Route path="quotes" element={<Quotes />} />
               <Route path="settings" element={<Settings />} />
+              <Route path="billing" element={<Billing />} />
             </Route>
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>

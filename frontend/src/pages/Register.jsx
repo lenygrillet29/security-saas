@@ -1,12 +1,31 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Shield, Eye, EyeOff, Loader2, CheckCircle } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
+import { Shield, Eye, EyeOff, Loader2, Lock, CreditCard } from 'lucide-react';
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { authApi } from '../api';
 
-export default function Register() {
-  const { login } = useAuth();
+const STRIPE_KEY = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+const stripePromise = STRIPE_KEY ? loadStripe(STRIPE_KEY) : null;
+
+const CARD_STYLE = {
+  style: {
+    base: {
+      color: '#e2e8f0',
+      fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+      fontSize: '14px',
+      '::placeholder': { color: '#64748b' },
+      iconColor: '#94a3b8',
+    },
+    invalid: { color: '#f87171', iconColor: '#f87171' },
+  },
+};
+
+function RegisterForm() {
   const navigate = useNavigate();
+  const stripe = useStripe();
+  const elements = useElements();
+
   const [form, setForm] = useState({
     company_name: '', email: '', password: '', confirm_password: '',
     first_name: '', last_name: '', phone: '', siret: '',
@@ -20,15 +39,30 @@ export default function Register() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (form.password !== form.confirm_password) {
-      return setError('Les mots de passe ne correspondent pas');
-    }
-    if (form.password.length < 8) {
-      return setError('Le mot de passe doit contenir au moins 8 caractères');
-    }
+
+    if (form.password !== form.confirm_password) return setError('Les mots de passe ne correspondent pas');
+    if (form.password.length < 8) return setError('Le mot de passe doit contenir au moins 8 caractères');
+
     setLoading(true);
     try {
-      const { token, user } = await authApi.register({
+      let payment_method_id;
+
+      // Tokeniser la carte si Stripe est configuré
+      if (stripePromise && stripe && elements) {
+        const cardElement = elements.getElement(CardElement);
+        const { paymentMethod, error: stripeError } = await stripe.createPaymentMethod({
+          type: 'card',
+          card: cardElement,
+          billing_details: {
+            name: `${form.first_name} ${form.last_name}`,
+            email: form.email,
+          },
+        });
+        if (stripeError) throw new Error(stripeError.message);
+        payment_method_id = paymentMethod.id;
+      }
+
+      const { token } = await authApi.register({
         company_name: form.company_name,
         email: form.email,
         password: form.password,
@@ -36,6 +70,7 @@ export default function Register() {
         last_name: form.last_name,
         phone: form.phone || undefined,
         siret: form.siret || undefined,
+        payment_method_id,
       });
       localStorage.setItem('auth_token', token);
       navigate('/dashboard');
@@ -46,18 +81,18 @@ export default function Register() {
     }
   };
 
-  const InputField = ({ label, field, type = 'text', placeholder, required = false }) => (
+  const Field = ({ label, field, type = 'text', placeholder, required = false }) => (
     <div>
       <label className="block text-sm font-medium text-slate-300 mb-1.5">
-        {label} {required && <span className="text-red-400">*</span>}
+        {label}{required && <span className="text-red-400 ml-0.5">*</span>}
       </label>
       <input
         type={type}
         required={required}
         value={form[field]}
         onChange={set(field)}
-        className="w-full px-3 py-2.5 bg-dark-700 border border-dark-500 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
         placeholder={placeholder}
+        className="w-full px-3 py-2.5 bg-dark-700 border border-dark-500 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors text-sm"
       />
     </div>
   );
@@ -78,16 +113,26 @@ export default function Register() {
 
         <div className="bg-dark-800 border border-dark-600 rounded-2xl p-8 shadow-2xl">
           <h1 className="text-xl font-bold text-white mb-1">Créer votre compte</h1>
-          <p className="text-sm text-slate-400 mb-6">Essai gratuit 14 jours — sans carte bancaire</p>
 
-          {/* Avantages */}
-          <div className="flex gap-4 mb-6 flex-wrap">
-            {['14 jours gratuits', 'Multi-utilisateurs', 'Support inclus'].map(t => (
-              <div key={t} className="flex items-center gap-1.5 text-xs text-emerald-400">
-                <CheckCircle className="w-3.5 h-3.5" />
-                {t}
+          {/* Récapitulatif offre */}
+          <div className="mt-3 mb-6 rounded-xl border border-dark-500 overflow-hidden">
+            <div className="grid grid-cols-3 divide-x divide-dark-500 text-center text-xs">
+              <div className="px-3 py-3">
+                <div className="font-bold text-emerald-400 text-base">Gratuit</div>
+                <div className="text-slate-400 mt-0.5">1er mois</div>
+                <div className="text-slate-500 mt-1">Carte enregistrée,<br/>aucun prélèvement</div>
               </div>
-            ))}
+              <div className="px-3 py-3">
+                <div className="font-bold text-white text-base">79 €/mois</div>
+                <div className="text-slate-400 mt-0.5">Mois 2 &amp; 3</div>
+                <div className="text-slate-500 mt-1">Engagement<br/>obligatoire</div>
+              </div>
+              <div className="px-3 py-3">
+                <div className="font-bold text-blue-400 text-base">Libre</div>
+                <div className="text-slate-400 mt-0.5">Dès le mois 4</div>
+                <div className="text-slate-500 mt-1">Résiliation avec<br/>30 j de préavis</div>
+              </div>
+            </div>
           </div>
 
           {error && (
@@ -97,19 +142,19 @@ export default function Register() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <InputField label="Nom de l'entreprise" field="company_name" placeholder="Ma Sécurité SARL" required />
+            <Field label="Nom de l'entreprise" field="company_name" placeholder="Ma Sécurité SARL" required />
 
             <div className="grid grid-cols-2 gap-3">
-              <InputField label="Prénom" field="first_name" placeholder="Jean" required />
-              <InputField label="Nom" field="last_name" placeholder="Dupont" required />
+              <Field label="Prénom" field="first_name" placeholder="Jean" required />
+              <Field label="Nom" field="last_name" placeholder="Dupont" required />
             </div>
 
-            <InputField label="Email professionnel" field="email" type="email" placeholder="contact@masecurite.fr" required />
+            <Field label="Email professionnel" field="email" type="email" placeholder="contact@masecurite.fr" required />
 
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                  Mot de passe <span className="text-red-400">*</span>
+                  Mot de passe<span className="text-red-400 ml-0.5">*</span>
                 </label>
                 <div className="relative">
                   <input
@@ -117,8 +162,8 @@ export default function Register() {
                     required
                     value={form.password}
                     onChange={set('password')}
-                    className="w-full px-3 py-2.5 pr-10 bg-dark-700 border border-dark-500 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
                     placeholder="8 caractères minimum"
+                    className="w-full px-3 py-2.5 pr-10 bg-dark-700 border border-dark-500 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors text-sm"
                   />
                   <button type="button" onClick={() => setShowPassword(s => !s)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200">
@@ -128,31 +173,50 @@ export default function Register() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                  Confirmation <span className="text-red-400">*</span>
+                  Confirmation<span className="text-red-400 ml-0.5">*</span>
                 </label>
                 <input
                   type="password"
                   required
                   value={form.confirm_password}
                   onChange={set('confirm_password')}
-                  className="w-full px-3 py-2.5 bg-dark-700 border border-dark-500 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
-                  placeholder="Répétez le mot de passe"
+                  placeholder="Répétez"
+                  className="w-full px-3 py-2.5 bg-dark-700 border border-dark-500 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors text-sm"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <InputField label="Téléphone" field="phone" placeholder="06 12 34 56 78" />
-              <InputField label="SIRET" field="siret" placeholder="123 456 789 00012" />
+              <Field label="Téléphone" field="phone" placeholder="06 12 34 56 78" />
+              <Field label="SIRET" field="siret" placeholder="123 456 789 00012" />
             </div>
+
+            {/* Stripe card element */}
+            {stripePromise && (
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                  <span className="flex items-center gap-1.5">
+                    <CreditCard className="w-4 h-4" />
+                    Carte bancaire<span className="text-red-400 ml-0.5">*</span>
+                  </span>
+                </label>
+                <div className="px-3 py-3 bg-dark-700 border border-dark-500 rounded-lg focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-colors">
+                  <CardElement options={CARD_STYLE} />
+                </div>
+                <p className="mt-1.5 flex items-center gap-1 text-xs text-slate-500">
+                  <Lock className="w-3 h-3" />
+                  Aucun prélèvement pendant le 1er mois — carte enregistrée de façon sécurisée via Stripe
+                </p>
+              </div>
+            )}
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || (stripePromise && !stripe)}
               className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/50 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 mt-2"
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              {loading ? 'Création en cours…' : 'Créer mon compte gratuitement'}
+              {loading ? 'Création en cours…' : 'Démarrer mon essai gratuit'}
             </button>
           </form>
 
@@ -166,4 +230,16 @@ export default function Register() {
       </div>
     </div>
   );
+}
+
+// Wrapper qui charge Stripe si la clé est disponible
+export default function Register() {
+  if (stripePromise) {
+    return (
+      <Elements stripe={stripePromise}>
+        <RegisterForm />
+      </Elements>
+    );
+  }
+  return <RegisterForm />;
 }

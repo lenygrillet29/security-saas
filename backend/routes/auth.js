@@ -12,7 +12,7 @@ const SALT_ROUNDS = 10;
 router.post('/register', async (req, res) => {
   const client = await db.pool.connect();
   try {
-    const { company_name, email, password, first_name, last_name, phone, siret } = req.body;
+    const { company_name, email, password, first_name, last_name, phone, siret, payment_method_id } = req.body;
 
     if (!company_name || !email || !password || !first_name || !last_name) {
       return res.status(400).json({ error: 'Tous les champs obligatoires sont requis' });
@@ -20,18 +20,56 @@ router.post('/register', async (req, res) => {
     if (password.length < 8) {
       return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 8 caractères' });
     }
+    // Carte obligatoire si Stripe est configuré
+    if (process.env.STRIPE_SECRET_KEY && !payment_method_id) {
+      return res.status(400).json({ error: 'Informations de carte bancaire requises' });
+    }
 
     const existing = await db.get('SELECT id FROM users WHERE email = ?', [email.toLowerCase()]);
     if (existing) return res.status(409).json({ error: 'Un compte avec cet email existe déjà' });
 
+    // ── Stripe : créer customer + subscription (1er mois gratuit) ──────────────
+    let stripeCustomerId = null;
+    let stripeSubscriptionId = null;
+
+    if (process.env.STRIPE_SECRET_KEY && payment_method_id) {
+      try {
+        const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+
+        // Créer le client Stripe avec la carte
+        const customer = await stripe.customers.create({
+          email: email.toLowerCase(),
+          name: company_name,
+          payment_method: payment_method_id,
+          invoice_settings: { default_payment_method: payment_method_id },
+        });
+        stripeCustomerId = customer.id;
+
+        // Créer l'abonnement — 30 jours d'essai gratuit, ensuite 79€/mois
+        if (process.env.STRIPE_PRICE_ID) {
+          const subscription = await stripe.subscriptions.create({
+            customer: customer.id,
+            items: [{ price: process.env.STRIPE_PRICE_ID }],
+            trial_end: Math.floor((Date.now() + 30 * 86400000) / 1000), // +30 jours
+            default_payment_method: payment_method_id,
+            expand: ['latest_invoice.payment_intent'],
+          });
+          stripeSubscriptionId = subscription.id;
+        }
+      } catch (stripeErr) {
+        // Erreur carte : on remonte directement sans créer le compte
+        return res.status(400).json({ error: `Erreur carte : ${stripeErr.message}` });
+      }
+    }
+
     await client.query('BEGIN');
 
-    // Créer l'entreprise (essai 14 jours)
+    // Créer l'entreprise — 1er mois gratuit (30 jours)
     const companyRes = await client.query(
-      `INSERT INTO companies (name, email, phone, siret, plan, plan_status, trial_ends_at)
-       VALUES ($1, $2, $3, $4, 'trial', 'active', NOW() + INTERVAL '14 days')
+      `INSERT INTO companies (name, email, phone, siret, plan, plan_status, trial_ends_at, stripe_customer_id, stripe_subscription_id)
+       VALUES ($1, $2, $3, $4, 'trial', 'trialing', NOW() + INTERVAL '30 days', $5, $6)
        RETURNING id`,
-      [company_name, email.toLowerCase(), phone || null, siret || null]
+      [company_name, email.toLowerCase(), phone || null, siret || null, stripeCustomerId, stripeSubscriptionId]
     );
     const companyId = companyRes.rows[0].id;
 

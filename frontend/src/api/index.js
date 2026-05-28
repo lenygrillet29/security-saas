@@ -150,3 +150,10 @@ export const emailApi = {
   sendAgentPlanning: (id, data) => post(`/email/planning/agent/${id}`, data),
   sendQuote: (id, data) => post(`/email/quote/${id}`, data),
 };
+
+// Billing
+export const billingApi = {
+  getSubscription: () => get('/billing/subscription'),
+  cancel: () => post('/billing/cancel', {}),
+  reactivate: () => post('/billing/reactivate', {}),
+};

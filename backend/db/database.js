@@ -197,7 +197,7 @@ async function init() {
     END $$;
   `);
 
-  // ALTER TABLE pour les colonnes company_id manquantes sur DB existantes
+  // ALTER TABLE pour les colonnes manquantes sur DB existantes
   await pool.query(`
     ALTER TABLE agents   ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE;
     ALTER TABLE clients  ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE;
@@ -205,6 +205,8 @@ async function init() {
     ALTER TABLE shifts   ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE;
     ALTER TABLE absences ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE;
     ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE;
+    ALTER TABLE companies ADD COLUMN IF NOT EXISTS cancel_at TIMESTAMP;
+    ALTER TABLE companies ADD COLUMN IF NOT EXISTS subscription_started_at TIMESTAMP;
   `);
 
   console.log('[DB] PostgreSQL connecté — schéma multi-tenant initialisé');
