@@ -43,9 +43,41 @@ app.use(express.json());
 // ─── Routes publiques (pas d'auth) ───────────────────────────────────────────
 app.use('/api/auth', require('./routes/auth'));
 
-app.get('/api/health', (req, res) =>
-  res.json({ status: 'ok', node: process.version, db: 'postgresql' })
-);
+app.get('/api/health', async (req, res) => {
+  const health = { status: 'ok', node: process.version, db: 'postgresql', stripe: null };
+
+  if (process.env.STRIPE_SECRET_KEY) {
+    const keyMode = process.env.STRIPE_SECRET_KEY.startsWith('sk_live_') ? 'live' : 'test';
+    const priceId = process.env.STRIPE_PRICE_ID || null;
+    const pricePreview = priceId
+      ? `${priceId.slice(0, 12)}…${priceId.slice(-4)}`
+      : null;
+
+    let priceValid = null;
+    if (priceId) {
+      try {
+        const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+        await stripe.prices.retrieve(priceId);
+        priceValid = true;
+      } catch (e) {
+        priceValid = false;
+        health.stripe_error = e.message;
+      }
+    }
+
+    health.stripe = {
+      configured: true,
+      key_mode:   keyMode,
+      price_id:   pricePreview,
+      price_valid: priceValid,
+      webhook_secret: !!process.env.STRIPE_WEBHOOK_SECRET,
+    };
+  } else {
+    health.stripe = { configured: false };
+  }
+
+  res.json(health);
+});
 
 // ─── Routes protégées (JWT requis) ────────────────────────────────────────────
 app.use('/api', requireAuth);
@@ -71,10 +103,31 @@ app.use((err, req, res, next) => {
 
 // ─── Démarrage ────────────────────────────────────────────────────────────────
 init()
-  .then(() => {
+  .then(async () => {
     app.listen(PORT, () => {
       console.log(`SecuritySaaS API running on port ${PORT} (PostgreSQL, multi-tenant)`);
     });
+
+    // ── Validation Stripe au démarrage ────────────────────────────────────────
+    if (process.env.STRIPE_SECRET_KEY) {
+      const keyMode = process.env.STRIPE_SECRET_KEY.startsWith('sk_live_') ? 'LIVE' : 'TEST';
+      console.log(`[Stripe] Mode : ${keyMode}`);
+
+      if (process.env.STRIPE_PRICE_ID) {
+        try {
+          const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+          const price = await stripe.prices.retrieve(process.env.STRIPE_PRICE_ID);
+          console.log(`[Stripe] ✅ STRIPE_PRICE_ID valide : ${price.id} (${price.unit_amount / 100} ${price.currency.toUpperCase()}/${price.recurring?.interval || 'once'})`);
+        } catch (e) {
+          console.error(`[Stripe] ❌ STRIPE_PRICE_ID invalide (${process.env.STRIPE_PRICE_ID.slice(0, 12)}…) : ${e.message}`);
+          console.error('[Stripe] → Vérifiez que le price_id correspond au mode', keyMode, '(test vs live)');
+        }
+      } else {
+        console.warn('[Stripe] ⚠️  STRIPE_PRICE_ID non défini — abonnement désactivé');
+      }
+    } else {
+      console.warn('[Stripe] Non configuré (STRIPE_SECRET_KEY absent)');
+    }
   })
   .catch(err => {
     console.error('[DB] Impossible de se connecter à PostgreSQL :', err.message);
