@@ -21,6 +21,24 @@ const CARD_STYLE = {
   },
 };
 
+// Défini en dehors du composant pour éviter la recréation à chaque render
+// (sinon React démonte/remonte l'input à chaque frappe → perte de focus)
+const Field = ({ label, field, type = 'text', placeholder, required = false, value, onChange }) => (
+  <div>
+    <label className="block text-sm font-medium text-slate-300 mb-1.5">
+      {label}{required && <span className="text-red-400 ml-0.5">*</span>}
+    </label>
+    <input
+      type={type}
+      required={required}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      className="w-full px-3 py-2.5 bg-dark-700 border border-dark-500 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors text-sm"
+    />
+  </div>
+);
+
 function RegisterForm() {
   const navigate = useNavigate();
   const stripe = useStripe();
@@ -81,22 +99,6 @@ function RegisterForm() {
     }
   };
 
-  const Field = ({ label, field, type = 'text', placeholder, required = false }) => (
-    <div>
-      <label className="block text-sm font-medium text-slate-300 mb-1.5">
-        {label}{required && <span className="text-red-400 ml-0.5">*</span>}
-      </label>
-      <input
-        type={type}
-        required={required}
-        value={form[field]}
-        onChange={set(field)}
-        placeholder={placeholder}
-        className="w-full px-3 py-2.5 bg-dark-700 border border-dark-500 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors text-sm"
-      />
-    </div>
-  );
-
   return (
     <div className="min-h-screen bg-dark-900 flex items-center justify-center p-4">
       <div className="w-full max-w-xl">
@@ -142,14 +144,14 @@ function RegisterForm() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <Field label="Nom de l'entreprise" field="company_name" placeholder="Ma Sécurité SARL" required />
+            <Field label="Nom de l'entreprise" field="company_name" placeholder="Ma Sécurité SARL" required value={form.company_name} onChange={set('company_name')} />
 
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Prénom" field="first_name" placeholder="Jean" required />
-              <Field label="Nom" field="last_name" placeholder="Dupont" required />
+              <Field label="Prénom" field="first_name" placeholder="Jean" required value={form.first_name} onChange={set('first_name')} />
+              <Field label="Nom" field="last_name" placeholder="Dupont" required value={form.last_name} onChange={set('last_name')} />
             </div>
 
-            <Field label="Email professionnel" field="email" type="email" placeholder="contact@masecurite.fr" required />
+            <Field label="Email professionnel" field="email" type="email" placeholder="contact@masecurite.fr" required value={form.email} onChange={set('email')} />
 
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -187,8 +189,8 @@ function RegisterForm() {
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Téléphone" field="phone" placeholder="06 12 34 56 78" />
-              <Field label="SIRET" field="siret" placeholder="123 456 789 00012" />
+              <Field label="Téléphone" field="phone" placeholder="06 12 34 56 78" value={form.phone} onChange={set('phone')} />
+              <Field label="SIRET" field="siret" placeholder="123 456 789 00012" value={form.siret} onChange={set('siret')} />
             </div>
 
             {/* Stripe card element */}
