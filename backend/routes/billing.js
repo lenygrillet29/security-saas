@@ -8,16 +8,20 @@ function getStripe() {
   return require('stripe')(process.env.STRIPE_SECRET_KEY);
 }
 
-// Calcul de la période (basé sur created_at de l'entreprise)
+// ─── Calcul des périodes ──────────────────────────────────────────────────────
+// Mois 1 (j0-j29)   : essai gratuit
+// Mois 2-3 (j30-j89): engagement obligatoire 79 €/mois
+// Mois 4+ (j90+)    : résiliable avec 30 j de préavis
 function getPeriodInfo(createdAt) {
-  const daysSinceSignup = Math.floor((Date.now() - new Date(createdAt)) / 86400000);
+  const days = Math.floor((Date.now() - new Date(createdAt)) / 86400000);
   return {
-    daysSinceSignup,
-    isTrialing: daysSinceSignup < 30,           // mois 1 : gratuit
-    isMandatory: daysSinceSignup >= 30 && daysSinceSignup < 90, // mois 2-3 : obligatoires
-    canCancel: daysSinceSignup >= 90,            // mois 4+ : résiliable
-    daysUntilCanCancel: Math.max(0, 90 - daysSinceSignup),
-    trialEndsIn: Math.max(0, 30 - daysSinceSignup),
+    daysSinceSignup:    days,
+    isTrialing:         days < 30,
+    isMandatory:        days >= 30 && days < 90,
+    canCancel:          days >= 90,
+    daysUntilCanCancel: Math.max(0, 90 - days),
+    trialEndsIn:        Math.max(0, 30 - days),
+    trialEndDate:       new Date(new Date(createdAt).getTime() + 30 * 86400000).toISOString(),
   };
 }
 
@@ -29,39 +33,44 @@ router.get('/subscription', requireAuth, async (req, res) => {
 
     const period = getPeriodInfo(company.created_at);
 
+    // Sync depuis Stripe si disponible
     let stripeData = null;
     if (company.stripe_subscription_id && process.env.STRIPE_SECRET_KEY) {
       try {
         const stripe = getStripe();
         const sub = await stripe.subscriptions.retrieve(company.stripe_subscription_id);
         stripeData = {
-          status: sub.status,
+          status:             sub.status,
+          trial_end:          sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null,
           current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
-          cancel_at: sub.cancel_at ? new Date(sub.cancel_at * 1000).toISOString() : null,
+          cancel_at:          sub.cancel_at ? new Date(sub.cancel_at * 1000).toISOString() : null,
         };
+        // Sync trial_ends_at si Stripe fait autorité
+        if (sub.trial_end && !company.trial_ends_at) {
+          await db.run('UPDATE companies SET trial_ends_at = ? WHERE id = ?',
+            [new Date(sub.trial_end * 1000).toISOString(), company.id]);
+        }
       } catch { /* subscription non trouvée dans Stripe */ }
     }
 
+    const phase = period.isTrialing ? 'trial' : period.isMandatory ? 'mandatory' : 'flexible';
+
     res.json({
-      plan: company.plan,
-      plan_status: company.plan_status,
+      plan:          company.plan,
+      plan_status:   company.plan_status,
       trial_ends_at: company.trial_ends_at,
-      cancel_at: company.cancel_at,
-      created_at: company.created_at,
-      stripe: stripeData,
+      cancel_at:     company.cancel_at || (stripeData?.cancel_at ?? null),
+      created_at:    company.created_at,
+      stripe:        stripeData,
       period,
+      phase,
       price_monthly: 79,
-      currency: 'EUR',
-      // Résumé lisible
-      phase:
-        period.isTrialing ? 'trial' :
-        period.isMandatory ? 'mandatory' :
-        'flexible',
+      currency:      'EUR',
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── POST résilier (admin seulement) ─────────────────────────────────────────
+// ─── POST résilier avec préavis 30 jours (admin) ──────────────────────────────
 router.post('/cancel', requireAuth, requireRole('admin'), async (req, res) => {
   try {
     const company = await db.get('SELECT * FROM companies WHERE id = ?', [req.user.companyId]);
@@ -70,28 +79,29 @@ router.post('/cancel', requireAuth, requireRole('admin'), async (req, res) => {
     const { canCancel, daysUntilCanCancel } = getPeriodInfo(company.created_at);
     if (!canCancel) {
       return res.status(400).json({
-        error: `Résiliation impossible pendant la période d'engagement obligatoire. Disponible dans ${daysUntilCanCancel} jour(s).`,
+        error: `Résiliation impossible : période d'engagement obligatoire en cours. Disponible dans ${daysUntilCanCancel} jour(s).`,
         days_until_can_cancel: daysUntilCanCancel,
       });
     }
 
-    if (company.cancel_at) {
+    const existingCancelAt = company.cancel_at || null;
+    if (existingCancelAt) {
       return res.status(400).json({ error: 'Une résiliation est déjà planifiée.' });
     }
 
-    // Préavis 30 jours
-    const cancelAtTs = Date.now() + 30 * 86400000;
-    const cancelAt = new Date(cancelAtTs).toISOString();
+    // Préavis fixe de 30 jours
+    const cancelAtMs  = Date.now() + 30 * 86400000;
+    const cancelAtIso = new Date(cancelAtMs).toISOString();
 
     if (company.stripe_subscription_id && process.env.STRIPE_SECRET_KEY) {
       const stripe = getStripe();
       await stripe.subscriptions.update(company.stripe_subscription_id, {
-        cancel_at: Math.floor(cancelAtTs / 1000),
+        cancel_at: Math.floor(cancelAtMs / 1000),
       });
     }
 
-    await db.run('UPDATE companies SET cancel_at = ? WHERE id = ?', [cancelAt, req.user.companyId]);
-    res.json({ success: true, cancel_at: cancelAt });
+    await db.run('UPDATE companies SET cancel_at = ? WHERE id = ?', [cancelAtIso, req.user.companyId]);
+    res.json({ success: true, cancel_at: cancelAtIso });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -103,7 +113,8 @@ router.post('/reactivate', requireAuth, requireRole('admin'), async (req, res) =
 
     if (company.stripe_subscription_id && process.env.STRIPE_SECRET_KEY) {
       const stripe = getStripe();
-      await stripe.subscriptions.update(company.stripe_subscription_id, { cancel_at: null });
+      // '' (empty string) = supprimer le cancel_at dans Stripe REST
+      await stripe.subscriptions.update(company.stripe_subscription_id, { cancel_at: '' });
     }
 
     await db.run('UPDATE companies SET cancel_at = NULL WHERE id = ?', [req.user.companyId]);
@@ -111,72 +122,118 @@ router.post('/reactivate', requireAuth, requireRole('admin'), async (req, res) =
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── POST Stripe webhook ──────────────────────────────────────────────────────
-// Nota : ce handler reçoit req.body en Buffer brut (voir server.js)
-router.post('/webhook', async (req, res) => {
+// ─── Webhook Stripe ───────────────────────────────────────────────────────────
+// Monté séparément dans server.js avec express.raw() AVANT express.json()
+// URL : POST /api/billing/webhook
+async function webhookHandler(req, res) {
   const sig = req.headers['stripe-signature'];
+
   if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET) {
-    return res.status(400).json({ error: 'Stripe non configuré' });
+    console.warn('[Webhook] Stripe non configuré — événement ignoré');
+    return res.json({ received: true });
   }
 
   let event;
   try {
     const stripe = getStripe();
+    // req.body est un Buffer brut grâce à express.raw() dans server.js
     event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (e) {
     console.error('[Webhook] Signature invalide :', e.message);
     return res.status(400).send(`Webhook Error: ${e.message}`);
   }
 
+  const obj = event.data.object;
+  console.log(`[Webhook] ${event.type} — customer: ${obj.customer || '–'}`);
+
   try {
-    const obj = event.data.object;
     switch (event.type) {
-      case 'customer.subscription.trial_will_end':
-        // Notif 3 jours avant fin de l'essai — rien à faire côté DB
-        console.log('[Billing] Essai se termine bientôt pour', obj.customer);
+
+      // ── Abonnement créé ou mis à jour ──────────────────────────────────────
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated': {
+        const updates = {
+          plan_status:          obj.status,              // trialing / active / past_due / canceled
+          stripe_subscription_id: obj.id,
+        };
+        // Sync date de fin d'essai depuis Stripe (source de vérité)
+        if (obj.trial_end) {
+          updates.trial_ends_at = new Date(obj.trial_end * 1000).toISOString();
+        }
+        // Si Stripe a supprimé le cancel_at, on nettoie notre DB
+        if (!obj.cancel_at) {
+          updates.cancel_at = null;
+        } else {
+          updates.cancel_at = new Date(obj.cancel_at * 1000).toISOString();
+        }
+
+        await db.pool.query(
+          `UPDATE companies
+           SET plan_status = $1, stripe_subscription_id = $2,
+               trial_ends_at = COALESCE($3, trial_ends_at),
+               cancel_at = $4
+           WHERE stripe_customer_id = $5`,
+          [updates.plan_status, updates.stripe_subscription_id,
+           updates.trial_ends_at || null, updates.cancel_at || null,
+           obj.customer]
+        );
+        break;
+      }
+
+      // ── Abonnement supprimé ────────────────────────────────────────────────
+      case 'customer.subscription.deleted':
+        await db.pool.query(
+          `UPDATE companies SET plan_status = 'canceled', plan = 'canceled'
+           WHERE stripe_customer_id = $1`,
+          [obj.customer]
+        );
         break;
 
-      case 'customer.subscription.updated':
-        await db.run(
-          'UPDATE companies SET plan_status = ?, stripe_subscription_id = ? WHERE stripe_customer_id = ?',
-          [obj.status, obj.id, obj.customer]
-        );
-        // Si cancel_at mis à 0 depuis Stripe (réactivation) : nettoyer notre DB
-        if (!obj.cancel_at) {
-          await db.run('UPDATE companies SET cancel_at = NULL WHERE stripe_customer_id = ?', [obj.customer]);
+      // ── Paiement réussi ────────────────────────────────────────────────────
+      // IMPORTANT : ne pas passer à 'active' si c'est la facture à 0 € du trial
+      case 'invoice.payment_succeeded':
+        if (obj.amount_due > 0) {
+          // Premier vrai paiement → passage trial → pro
+          await db.pool.query(
+            `UPDATE companies
+             SET plan_status = 'active', plan = 'pro',
+                 subscription_started_at = COALESCE(subscription_started_at, NOW())
+             WHERE stripe_customer_id = $1`,
+            [obj.customer]
+          );
+          console.log(`[Billing] Premier paiement reçu (${obj.amount_due / 100} €) pour`, obj.customer);
+        } else {
+          // Facture à 0 € = début du trial → on reste en 'trialing'
+          console.log('[Billing] Facture trial à 0 € — statut trialing conservé');
         }
         break;
 
-      case 'customer.subscription.deleted':
-        await db.run(
-          'UPDATE companies SET plan_status = ?, plan = ? WHERE stripe_customer_id = ?',
-          ['canceled', 'canceled', obj.customer]
-        );
-        break;
-
-      case 'invoice.payment_succeeded':
-        // Passage trial → actif
-        await db.run(
-          `UPDATE companies SET plan_status = 'active', plan = 'pro',
-           subscription_started_at = COALESCE(subscription_started_at, NOW())
-           WHERE stripe_customer_id = ?`,
-          [obj.customer]
-        );
-        break;
-
+      // ── Échec de paiement ─────────────────────────────────────────────────
       case 'invoice.payment_failed':
-        await db.run(
-          "UPDATE companies SET plan_status = 'past_due' WHERE stripe_customer_id = ?",
+        await db.pool.query(
+          `UPDATE companies SET plan_status = 'past_due' WHERE stripe_customer_id = $1`,
           [obj.customer]
         );
+        console.log('[Billing] Paiement échoué pour', obj.customer);
         break;
+
+      // ── Essai se terminant dans 3 jours ──────────────────────────────────
+      case 'customer.subscription.trial_will_end':
+        // TODO: envoyer un email de rappel (à implémenter)
+        console.log('[Billing] Essai se terminant bientôt pour', obj.customer);
+        break;
+
+      default:
+        console.log(`[Webhook] Événement non traité : ${event.type}`);
     }
 
     res.json({ received: true });
   } catch (e) {
-    console.error('[Webhook] Erreur traitement :', e.message);
-    res.status(500).json({ error: e.message });
+    console.error('[Webhook] Erreur traitement :', event.type, e.message);
+    // Retourner 200 quand même pour éviter que Stripe ne renvoie l'événement en boucle
+    res.json({ received: true, error: e.message });
   }
-});
+}
 
 module.exports = router;
+module.exports.webhookHandler = webhookHandler;

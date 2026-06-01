@@ -29,13 +29,19 @@ const corsOptions = {
 app.options('*', cors(corsOptions));
 app.use(cors(corsOptions));
 
-// Body brut pour le webhook Stripe (AVANT express.json)
-app.use('/api/billing/webhook', express.raw({ type: 'application/json' }));
+// ── Webhook Stripe : body brut AVANT express.json() ──────────────────────────
+// Doit être déclaré ici pour intercepter le raw body avant le parser JSON global
+const { webhookHandler } = require('./routes/billing');
+app.post(
+  '/api/billing/webhook',
+  express.raw({ type: 'application/json' }),
+  webhookHandler
+);
+
 app.use(express.json());
 
-// ─── Routes publiques ─────────────────────────────────────────────────────────
+// ─── Routes publiques (pas d'auth) ───────────────────────────────────────────
 app.use('/api/auth', require('./routes/auth'));
-app.use('/api/billing/webhook', require('./routes/billing'));
 
 app.get('/api/health', (req, res) =>
   res.json({ status: 'ok', node: process.version, db: 'postgresql' })
@@ -52,7 +58,7 @@ app.use('/api/quotes',   require('./routes/quotes'));
 app.use('/api/pdf',      require('./routes/pdf'));
 app.use('/api/email',    require('./routes/email'));
 app.use('/api/settings', require('./routes/settings'));
-app.use('/api/billing', require('./routes/billing'));
+app.use('/api/billing',  require('./routes/billing'));  // /subscription, /cancel, /reactivate
 
 // ─── Gestionnaire d'erreurs ───────────────────────────────────────────────────
 app.use((err, req, res, next) => {
