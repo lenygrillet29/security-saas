@@ -4,6 +4,8 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { db } = require('../db/database');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const { sendSystemEmail } = require('../utils/systemEmail');
+const templates = require('../utils/emailTemplates');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-prod';
 const SALT_ROUNDS = 10;
@@ -113,6 +115,14 @@ router.post('/register', async (req, res) => {
       JWT_SECRET,
       { expiresIn: '7d' }
     );
+
+    // Email de bienvenue (async — ne bloque pas la réponse)
+    const trialEndDate = new Date(Date.now() + 30 * 86400000).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+    sendSystemEmail({
+      to: email.toLowerCase(),
+      subject: `Bienvenue sur SecuritySaaS, ${first_name} ! 🎉`,
+      html: templates.welcome({ companyName: company_name, firstName: first_name, trialEndDate }),
+    }).catch(() => {});
 
     res.status(201).json({
       token,

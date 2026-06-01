@@ -9,15 +9,18 @@ import { format, startOfMonth, endOfMonth } from 'date-fns';
 function SiteForm({ site, clients, onSave, onClose }) {
   const toast = useToast();
   const [form, setForm] = useState({
-    client_id: site?.client_id || '',
-    name: site?.name || '',
-    address: site?.address || '',
-    city: site?.city || '',
-    hourly_rate_day: site?.hourly_rate_day || '',
-    hourly_rate_night: site?.hourly_rate_night || '',
+    client_id:          site?.client_id || '',
+    name:               site?.name || '',
+    address:            site?.address || '',
+    city:               site?.city || '',
+    hourly_rate_day:    site?.hourly_rate_day || '',
+    hourly_rate_night:  site?.hourly_rate_night || '',
     hourly_rate_sunday: site?.hourly_rate_sunday || '',
-    notes: site?.notes || '',
-    active: site?.active !== undefined ? site.active : 1,
+    latitude:           site?.latitude || '',
+    longitude:          site?.longitude || '',
+    instructions:       site?.instructions || '',
+    notes:              site?.notes || '',
+    active:             site?.active !== undefined ? site.active : 1,
   });
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
@@ -70,8 +73,38 @@ function SiteForm({ site, clients, onSave, onClose }) {
           </div>
         </div>
       </div>
+      {/* Géolocalisation */}
+      <div className="bg-dark-700 rounded-lg p-4">
+        <div className="text-xs font-medium text-slate-400 mb-3 flex items-center gap-1.5">
+          <MapPin className="w-3.5 h-3.5 text-blue-400" />
+          Coordonnées GPS (pour la prise de service obligatoire à 200m)
+        </div>
+        <div className="grid grid-cols-2 gap-4 mb-3">
+          <div>
+            <label className="label">Latitude</label>
+            <input type="number" step="any" className="input" value={form.latitude} onChange={e => set('latitude', e.target.value)} placeholder="48.8566" />
+          </div>
+          <div>
+            <label className="label">Longitude</label>
+            <input type="number" step="any" className="input" value={form.longitude} onChange={e => set('longitude', e.target.value)} placeholder="2.3522" />
+          </div>
+        </div>
+        <p className="text-xs text-slate-500">
+          💡 Cherchez l'adresse sur{' '}
+          <a href="https://www.latlong.net/" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline">latlong.net</a>
+          {' '}pour obtenir les coordonnées.
+        </p>
+      </div>
+
+      {/* Consignes du site */}
       <div>
-        <label className="label">Notes</label>
+        <label className="label">Consignes du site</label>
+        <textarea className="input" rows={3} value={form.instructions} onChange={e => set('instructions', e.target.value)}
+          placeholder="Consignes envoyées par SMS aux agents avant leur prestation..." />
+      </div>
+
+      <div>
+        <label className="label">Notes internes</label>
         <textarea className="input" rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} />
       </div>
       <div className="flex items-center gap-2">

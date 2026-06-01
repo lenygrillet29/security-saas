@@ -105,4 +105,84 @@ router.delete('/:id', requireWriter, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── Prise de service géolocalisée ───────────────────────────────────────────
+// Distance haversine en mètres entre deux coordonnées GPS
+function haversineMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const φ1 = lat1 * Math.PI / 180, φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(Δφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+const CHECKIN_RADIUS_METERS = parseInt(process.env.CHECKIN_RADIUS_METERS) || 200;
+
+// POST /api/shifts/:id/checkin
+router.post('/:id/checkin', async (req, res) => {
+  try {
+    const { latitude, longitude } = req.body;
+    if (latitude == null || longitude == null) {
+      return res.status(400).json({ error: 'latitude et longitude requis' });
+    }
+
+    const shift = await db.get(`
+      SELECT sh.*, s.latitude AS site_lat, s.longitude AS site_lng, s.name AS site_name
+      FROM shifts sh JOIN sites s ON sh.site_id = s.id
+      WHERE sh.id = ? AND sh.company_id = ?
+    `, [req.params.id, req.user.companyId]);
+    if (!shift) return res.status(404).json({ error: 'Shift non trouvé' });
+    if (shift.checkin_at) return res.status(400).json({ error: 'Prise de service déjà effectuée' });
+
+    // Vérification de la distance si le site a des coordonnées GPS
+    let distance = null;
+    if (shift.site_lat != null && shift.site_lng != null) {
+      distance = Math.round(haversineMeters(latitude, longitude, shift.site_lat, shift.site_lng));
+      if (distance > CHECKIN_RADIUS_METERS) {
+        return res.status(400).json({
+          error: `Vous êtes trop loin du site (${distance} m). Rayon autorisé : ${CHECKIN_RADIUS_METERS} m.`,
+          distance,
+          max_distance: CHECKIN_RADIUS_METERS,
+        });
+      }
+    }
+
+    await db.run(
+      'UPDATE shifts SET checkin_at = NOW(), checkin_lat = ?, checkin_lng = ?, checkin_distance = ? WHERE id = ?',
+      [latitude, longitude, distance, req.params.id]
+    );
+    res.json({ success: true, distance, checked_in_at: new Date().toISOString() });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/shifts/:id/checkout
+router.post('/:id/checkout', async (req, res) => {
+  try {
+    const { latitude, longitude } = req.body;
+    if (latitude == null || longitude == null) {
+      return res.status(400).json({ error: 'latitude et longitude requis' });
+    }
+
+    const shift = await db.get(`
+      SELECT sh.*, s.latitude AS site_lat, s.longitude AS site_lng
+      FROM shifts sh JOIN sites s ON sh.site_id = s.id
+      WHERE sh.id = ? AND sh.company_id = ?
+    `, [req.params.id, req.user.companyId]);
+    if (!shift) return res.status(404).json({ error: 'Shift non trouvé' });
+    if (!shift.checkin_at) return res.status(400).json({ error: 'Prise de service non effectuée' });
+    if (shift.checkout_at) return res.status(400).json({ error: 'Fin de service déjà enregistrée' });
+
+    let distance = null;
+    if (shift.site_lat != null && shift.site_lng != null) {
+      distance = Math.round(haversineMeters(latitude, longitude, shift.site_lat, shift.site_lng));
+    }
+
+    await db.run(
+      'UPDATE shifts SET checkout_at = NOW(), checkout_lat = ?, checkout_lng = ? WHERE id = ?',
+      [latitude, longitude, req.params.id]
+    );
+    res.json({ success: true, distance, checked_out_at: new Date().toISOString() });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

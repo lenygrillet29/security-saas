@@ -157,3 +157,21 @@ export const billingApi = {
   cancel: () => post('/billing/cancel', {}),
   reactivate: () => post('/billing/reactivate', {}),
 };
+
+// Contracts
+export const contractsApi = {
+  list: () => get('/contracts'),
+  get: (id) => get(`/contracts/${id}`),
+  create: (data) => post('/contracts', data),
+  update: (id, data) => put(`/contracts/${id}`, data),
+  delete: (id) => del(`/contracts/${id}`),
+  send: (id) => post(`/contracts/${id}/send`, {}),
+  getByToken: (token) => fetch(`${BASE}/contracts/sign/${token}`).then(r => r.json()),
+  signByToken: (token) => fetch(`${BASE}/contracts/sign/${token}`, { method: 'POST' }).then(r => r.json()),
+};
+
+// Shifts check-in/check-out
+export const checkinApi = {
+  checkin: (shiftId, coords) => post(`/shifts/${shiftId}/checkin`, coords),
+  checkout: (shiftId, coords) => post(`/shifts/${shiftId}/checkout`, coords),
+};

@@ -43,6 +43,12 @@ app.use(express.json());
 // ─── Routes publiques (pas d'auth) ───────────────────────────────────────────
 app.use('/api/auth', require('./routes/auth'));
 
+// ─── Signature de contrat (public — token dans l'URL) ────────────────────────
+app.use('/api/contracts/sign', require('./routes/contracts'));
+
+// ─── Admin superadmin (protégé par ADMIN_MASTER_KEY, pas JWT) ────────────────
+app.use('/api/admin', require('./routes/admin'));
+
 app.get('/api/health', async (req, res) => {
   const health = { status: 'ok', node: process.version, db: 'postgresql', stripe: null };
 
@@ -90,7 +96,8 @@ app.use('/api/quotes',   require('./routes/quotes'));
 app.use('/api/pdf',      require('./routes/pdf'));
 app.use('/api/email',    require('./routes/email'));
 app.use('/api/settings', require('./routes/settings'));
-app.use('/api/billing',  require('./routes/billing'));  // /subscription, /cancel, /reactivate
+app.use('/api/billing',   require('./routes/billing'));   // /subscription, /cancel, /reactivate
+app.use('/api/contracts', require('./routes/contracts')); // CRUD + envoi + signature
 
 // ─── Gestionnaire d'erreurs ───────────────────────────────────────────────────
 app.use((err, req, res, next) => {
@@ -107,6 +114,10 @@ init()
     app.listen(PORT, () => {
       console.log(`SecuritySaaS API running on port ${PORT} (PostgreSQL, multi-tenant)`);
     });
+
+    // ── Scheduler (cron jobs) ─────────────────────────────────────────────────
+    const { startScheduler } = require('./jobs/scheduler');
+    startScheduler();
 
     // ── Validation Stripe au démarrage ────────────────────────────────────────
     if (process.env.STRIPE_SECRET_KEY) {

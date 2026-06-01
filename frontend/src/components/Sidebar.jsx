@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Calendar, Users, Building2,
   MapPin, FileText, Settings, Shield, ClipboardList,
-  LogOut, ChevronDown, CreditCard,
+  LogOut, ChevronDown, CreditCard, ScrollText,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
@@ -13,8 +13,9 @@ const NAV = [
   { to: '/agents', icon: Users, label: 'Agents' },
   { to: '/clients', icon: Building2, label: 'Clients' },
   { to: '/sites', icon: MapPin, label: 'Sites' },
-  { to: '/absences', icon: ClipboardList, label: 'Absences / Congés' },
-  { to: '/quotes', icon: FileText, label: 'Devis' },
+  { to: '/absences',  icon: ClipboardList, label: 'Absences / Congés' },
+  { to: '/quotes',    icon: FileText,      label: 'Devis' },
+  { to: '/contracts', icon: ScrollText,    label: 'Contrats' },
 ];
 
 const ROLE_LABELS = {

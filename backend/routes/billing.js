@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../db/database');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const { sendSystemEmail } = require('../utils/systemEmail');
+const templates = require('../utils/emailTemplates');
 
 function getStripe() {
   if (!process.env.STRIPE_SECRET_KEY) throw new Error('STRIPE_SECRET_KEY non configurée');
@@ -101,6 +103,24 @@ router.post('/cancel', requireAuth, requireRole('admin'), async (req, res) => {
     }
 
     await db.run('UPDATE companies SET cancel_at = ? WHERE id = ?', [cancelAtIso, req.user.companyId]);
+
+    // Email de confirmation de résiliation
+    const admin = await db.get(
+      'SELECT u.email, u.first_name, c.name FROM users u JOIN companies c ON u.company_id = c.id WHERE u.company_id = ? AND u.role = ?',
+      [req.user.companyId, 'admin']
+    );
+    if (admin) {
+      sendSystemEmail({
+        to: admin.email,
+        subject: 'Résiliation confirmée — SecuritySaaS',
+        html: templates.cancellationConfirmed({
+          firstName:   admin.first_name,
+          companyName: admin.name,
+          cancelAt:    new Date(cancelAtIso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }),
+        }),
+      }).catch(() => {});
+    }
+
     res.json({ success: true, cancel_at: cancelAtIso });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -202,6 +222,30 @@ async function webhookHandler(req, res) {
             [obj.customer]
           );
           console.log(`[Billing] Premier paiement reçu (${obj.amount_due / 100} €) pour`, obj.customer);
+
+          // Email de confirmation de paiement
+          try {
+            const { rows } = await db.pool.query(
+              `SELECT u.email, u.first_name, c.name FROM users u JOIN companies c ON u.company_id = c.id
+               WHERE c.stripe_customer_id = $1 AND u.role = 'admin' LIMIT 1`,
+              [obj.customer]
+            );
+            if (rows[0]) {
+              const amount = (obj.amount_due / 100).toFixed(2);
+              const date   = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+              sendSystemEmail({
+                to: rows[0].email,
+                subject: `Confirmation de paiement — ${amount} €`,
+                html: templates.paymentSucceeded({
+                  firstName:   rows[0].first_name,
+                  companyName: rows[0].name,
+                  amount,
+                  date,
+                  invoiceUrl:  obj.hosted_invoice_url || null,
+                }),
+              }).catch(() => {});
+            }
+          } catch {}
         } else {
           // Facture à 0 € = début du trial → on reste en 'trialing'
           console.log('[Billing] Facture trial à 0 € — statut trialing conservé');
@@ -215,6 +259,26 @@ async function webhookHandler(req, res) {
           [obj.customer]
         );
         console.log('[Billing] Paiement échoué pour', obj.customer);
+
+        // Email d'alerte paiement échoué
+        try {
+          const { rows } = await db.pool.query(
+            `SELECT u.email, u.first_name, c.name FROM users u JOIN companies c ON u.company_id = c.id
+             WHERE c.stripe_customer_id = $1 AND u.role = 'admin' LIMIT 1`,
+            [obj.customer]
+          );
+          if (rows[0]) {
+            sendSystemEmail({
+              to: rows[0].email,
+              subject: '⚠️ Échec de paiement — SecuritySaaS',
+              html: templates.paymentFailed({
+                firstName:   rows[0].first_name,
+                companyName: rows[0].name,
+                amount:      ((obj.amount_due || 7900) / 100).toFixed(2),
+              }),
+            }).catch(() => {});
+          }
+        } catch {}
         break;
 
       // ── Essai se terminant dans 3 jours ──────────────────────────────────

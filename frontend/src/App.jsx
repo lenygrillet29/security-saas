@@ -13,6 +13,8 @@ import Absences from './pages/Absences';
 import Quotes from './pages/Quotes';
 import Settings from './pages/Settings';
 import Billing from './pages/Billing';
+import Contracts from './pages/Contracts';
+import SignContract from './pages/SignContract';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -36,8 +38,13 @@ export default function App() {
       <ToastProvider>
         <BrowserRouter>
           <Routes>
+            {/* Pages publiques */}
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            {/* Page de signature de contrat (publique) */}
+            <Route path="/sign-contract/:token" element={<SignContract />} />
+
+            {/* Application protégée */}
             <Route
               path="/"
               element={
@@ -54,6 +61,7 @@ export default function App() {
               <Route path="sites" element={<Sites />} />
               <Route path="absences" element={<Absences />} />
               <Route path="quotes" element={<Quotes />} />
+              <Route path="contracts" element={<Contracts />} />
               <Route path="settings" element={<Settings />} />
               <Route path="billing" element={<Billing />} />
             </Route>

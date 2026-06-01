@@ -1,0 +1,49 @@
+{
+  "name": "SecuritySaaS — Gestion Sécurité Privée",
+  "short_name": "SecuritySaaS",
+  "description": "Logiciel de gestion pour entreprises de sécurité privée",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#2563eb",
+  "orientation": "portrait-primary",
+  "categories": ["business", "productivity"],
+  "lang": "fr",
+  "icons": [
+    {
+      "src": "/shield.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Planning",
+      "short_name": "Planning",
+      "description": "Accéder au planning",
+      "url": "/planning",
+      "icons": [{ "src": "/shield.svg", "sizes": "any" }]
+    },
+    {
+      "name": "Agents",
+      "short_name": "Agents",
+      "description": "Liste des agents",
+      "url": "/agents",
+      "icons": [{ "src": "/shield.svg", "sizes": "any" }]
+    }
+  ]
+}

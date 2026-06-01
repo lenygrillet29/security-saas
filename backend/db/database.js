@@ -209,6 +209,47 @@ async function init() {
     ALTER TABLE companies ADD COLUMN IF NOT EXISTS subscription_started_at TIMESTAMP;
   `);
 
+  // ── Géolocalisation : coordonnées + consignes sur les sites ──────────────────
+  await pool.query(`
+    ALTER TABLE sites ADD COLUMN IF NOT EXISTS latitude  REAL;
+    ALTER TABLE sites ADD COLUMN IF NOT EXISTS longitude REAL;
+    ALTER TABLE sites ADD COLUMN IF NOT EXISTS instructions TEXT;
+  `);
+
+  // ── Prise de service géolocalisée sur les shifts ──────────────────────────────
+  await pool.query(`
+    ALTER TABLE shifts ADD COLUMN IF NOT EXISTS checkin_at       TIMESTAMP;
+    ALTER TABLE shifts ADD COLUMN IF NOT EXISTS checkout_at      TIMESTAMP;
+    ALTER TABLE shifts ADD COLUMN IF NOT EXISTS checkin_lat      REAL;
+    ALTER TABLE shifts ADD COLUMN IF NOT EXISTS checkin_lng      REAL;
+    ALTER TABLE shifts ADD COLUMN IF NOT EXISTS checkout_lat     REAL;
+    ALTER TABLE shifts ADD COLUMN IF NOT EXISTS checkout_lng     REAL;
+    ALTER TABLE shifts ADD COLUMN IF NOT EXISTS checkin_distance INTEGER;
+  `);
+
+  // ── Contrats de travail ────────────────────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS contracts (
+      id                   SERIAL PRIMARY KEY,
+      company_id           INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      agent_id             INTEGER NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+      type                 TEXT NOT NULL DEFAULT 'CDI',
+      title                TEXT NOT NULL,
+      start_date           TEXT NOT NULL,
+      end_date             TEXT,
+      gross_salary         REAL DEFAULT 0,
+      hours_per_week       REAL DEFAULT 35,
+      position             TEXT,
+      trial_period_months  INTEGER DEFAULT 0,
+      notes                TEXT,
+      status               TEXT DEFAULT 'draft',
+      sign_token           TEXT UNIQUE,
+      signed_at            TIMESTAMP,
+      signed_ip            TEXT,
+      created_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   console.log('[DB] PostgreSQL connecté — schéma multi-tenant initialisé');
 }
 
