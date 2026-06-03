@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Calendar, Users, Building2,
   MapPin, FileText, Settings, Shield, ClipboardList,
-  LogOut, ChevronDown, CreditCard, ScrollText, Receipt, Activity, TrendingUp, Calculator,
+  LogOut, ChevronDown, CreditCard, ScrollText, Receipt, Activity, TrendingUp, Calculator, X,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
@@ -41,19 +41,26 @@ export default function Sidebar() {
   const roleInfo = ROLE_LABELS[user?.role] || ROLE_LABELS.lecteur;
 
   return (
-    <aside className="w-60 bg-dark-800 border-r border-dark-600 flex flex-col shrink-0">
+    <aside className="w-64 h-full bg-dark-800 border-r border-dark-600 flex flex-col shrink-0">
       {/* Logo + company */}
-      <div className="px-5 py-5 border-b border-dark-600">
+      <div className="px-5 py-4 border-b border-dark-600">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">
             <Shield className="w-4 h-4 text-white" />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="text-sm font-bold text-white leading-tight truncate">
               {user?.company_name || 'SecuroPlan'}
             </div>
             <div className="text-xs text-slate-500 truncate">Gestion Sécurité</div>
           </div>
+          {/* Bouton fermer — mobile seulement */}
+          <button
+            className="md:hidden p-1 text-slate-400 hover:text-white rounded-lg"
+            onClick={() => window.dispatchEvent(new CustomEvent('closeSidebar'))}
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
