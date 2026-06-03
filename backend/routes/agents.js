@@ -127,6 +127,36 @@ router.put('/:id', requireWriter, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── Renvoyer le lien portail agent ──────────────────────────────────────────
+router.post('/:id/send-portal', requireWriter, async (req, res) => {
+  try {
+    const agent = await db.get('SELECT * FROM agents WHERE id = ? AND company_id = ?', [req.params.id, req.user.companyId]);
+    if (!agent) return res.status(404).json({ error: 'Agent non trouvé' });
+    if (!agent.email) return res.status(400).json({ error: 'Cet agent n\'a pas d\'email' });
+
+    // Générer un token si pas encore fait
+    let token = agent.agent_token;
+    if (!token) {
+      token = randomUUID();
+      await db.run('UPDATE agents SET agent_token = ? WHERE id = ?', [token, agent.id]);
+    }
+
+    const appUrl = process.env.APP_URL || 'https://securoplan.vercel.app';
+    const company = await db.get('SELECT name FROM companies WHERE id = ?', [req.user.companyId]);
+    await sendSystemEmail({
+      to: agent.email,
+      subject: `Votre espace agent — ${company?.name || 'SecuroPlan'}`,
+      html: templates.agentPortalLink({
+        agentFirstName: agent.first_name,
+        companyName:    company?.name || 'SecuroPlan',
+        portalUrl:      `${appUrl}/agent/${token}`,
+      }),
+    });
+
+    res.json({ success: true, sent_to: agent.email });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── Archive / Désarchive ─────────────────────────────────────────────────────
 router.post('/:id/archive', requireWriter, async (req, res) => {
   try {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, Phone, Mail, Search, Download, Archive, ArchiveRestore, Send, AlertTriangle, Zap } from 'lucide-react';
+import { Plus, Edit2, Trash2, Phone, Mail, Search, Download, Archive, ArchiveRestore, Send, AlertTriangle, Zap, Smartphone } from 'lucide-react';
 import { agentsApi, shiftsApi, pdfApi, emailApi, addonsApi } from '../api';
 import { useNavigate } from 'react-router-dom';
 import Modal from '../components/Modal';
@@ -171,6 +171,14 @@ function AgentsInner() {
     } catch (err) { toast(err.message, 'error'); }
   }
 
+  async function handleSendPortal(agent) {
+    if (!agent.email) return toast('Cet agent n\'a pas d\'email', 'error');
+    try {
+      await agentsApi.sendPortal(agent.id);
+      toast(`Lien appli envoyé à ${agent.email} 📱`);
+    } catch (err) { toast(err.message, 'error'); }
+  }
+
   const filtered = agents.filter(a => {
     const matchSearch = `${a.first_name} ${a.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
       (a.employee_number || '').includes(search);
@@ -298,6 +306,13 @@ function AgentsInner() {
                           title="Envoyer planning par email"
                         >
                           <Send className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleSendPortal(agent)}
+                          className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-600/10 rounded-lg transition-colors"
+                          title="Envoyer le lien appli mobile"
+                        >
+                          <Smartphone className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => handleArchive(agent)}

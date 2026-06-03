@@ -57,6 +57,7 @@ export const agentsApi = {
   delete: (id) => del(`/agents/${id}`),
   archive: (id) => post(`/agents/${id}/archive`, {}),
   unarchive: (id) => post(`/agents/${id}/unarchive`, {}),
+  sendPortal: (id) => post(`/agents/${id}/send-portal`, {}),
   available: (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/agents/available${q ? `?${q}` : ''}`); },
 };
 
