@@ -191,13 +191,21 @@ router.get('/me', requireAuth, async (req, res) => {
   try {
     const user = await db.get(
       `SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.company_id,
-              c.name as company_name, c.plan, c.plan_status, c.trial_ends_at
+              c.name as company_name, c.plan, c.plan_status, c.trial_ends_at, c.addons
        FROM users u JOIN companies c ON u.company_id = c.id
        WHERE u.id = ? AND u.active = 1`,
       [req.user.userId]
     );
     if (!user) return res.status(404).json({ error: 'Utilisateur non trouvé' });
-    res.json(user);
+
+    // Parse addons JSON ; lifetime = tous les addons activés
+    let addons;
+    if (user.plan === 'lifetime') {
+      addons = ['chiffrage'];
+    } else {
+      try { addons = JSON.parse(user.addons || '[]'); } catch { addons = []; }
+    }
+    res.json({ ...user, addons });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

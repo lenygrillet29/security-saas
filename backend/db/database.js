@@ -296,6 +296,12 @@ async function init() {
     );
   `);
 
+  // ── Add-ons payants ──────────────────────────────────────────────────────────
+  await pool.query(`
+    ALTER TABLE companies ADD COLUMN IF NOT EXISTS addons TEXT DEFAULT '[]';
+    ALTER TABLE companies ADD COLUMN IF NOT EXISTS addon_chiffrage_subscription_id TEXT;
+  `);
+
   console.log('[DB] PostgreSQL connecté — schéma multi-tenant initialisé');
 }
 

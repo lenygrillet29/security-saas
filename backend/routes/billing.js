@@ -200,15 +200,6 @@ async function webhookHandler(req, res) {
         break;
       }
 
-      // ── Abonnement supprimé ────────────────────────────────────────────────
-      case 'customer.subscription.deleted':
-        await db.pool.query(
-          `UPDATE companies SET plan_status = 'canceled', plan = 'canceled'
-           WHERE stripe_customer_id = $1`,
-          [obj.customer]
-        );
-        break;
-
       // ── Paiement réussi ────────────────────────────────────────────────────
       // IMPORTANT : ne pas passer à 'active' si c'est la facture à 0 € du trial
       case 'invoice.payment_succeeded':
@@ -283,9 +274,39 @@ async function webhookHandler(req, res) {
 
       // ── Essai se terminant dans 3 jours ──────────────────────────────────
       case 'customer.subscription.trial_will_end':
-        // TODO: envoyer un email de rappel (à implémenter)
         console.log('[Billing] Essai se terminant bientôt pour', obj.customer);
         break;
+
+      // ── Checkout Session complétée (achat add-on) ─────────────────────────
+      case 'checkout.session.completed': {
+        const addonId    = obj.metadata?.addon_id;
+        const companyId  = obj.metadata?.company_id;
+        const subId      = obj.subscription;
+        if (addonId && companyId && subId) {
+          const { activateAddon } = require('./addons');
+          await activateAddon(parseInt(companyId), addonId, subId);
+        }
+        break;
+      }
+
+      // ── Résiliation add-on ────────────────────────────────────────────────
+      case 'customer.subscription.deleted': {
+        // Vérifie si c'est un add-on (metadata.addon_id présent)
+        const addonIdDel   = obj.metadata?.addon_id;
+        const companyIdDel = obj.metadata?.company_id;
+        if (addonIdDel && companyIdDel) {
+          const { deactivateAddon } = require('./addons');
+          await deactivateAddon(parseInt(companyIdDel), addonIdDel);
+        } else {
+          // Abonnement principal supprimé
+          await db.pool.query(
+            `UPDATE companies SET plan_status = 'canceled', plan = 'canceled'
+             WHERE stripe_customer_id = $1`,
+            [obj.customer]
+          );
+        }
+        break;
+      }
 
       default:
         console.log(`[Webhook] Événement non traité : ${event.type}`);

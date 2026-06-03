@@ -160,6 +160,13 @@ export const simulationApi = {
   margin: (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/shifts/stats/margin${q ? `?${q}` : ''}`); },
 };
 
+// Add-ons
+export const addonsApi = {
+  list: () => get('/addons'),
+  checkout: (addonId) => post(`/addons/checkout/${addonId}`, {}),
+  cancel: (addonId) => post(`/addons/cancel/${addonId}`, {}),
+};
+
 // Billing
 export const billingApi = {
   getSubscription: () => get('/billing/subscription'),

@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Calendar, Users, Building2,
   MapPin, FileText, Settings, Shield, ClipboardList,
-  LogOut, ChevronDown, CreditCard, ScrollText, Receipt, Activity, TrendingUp,
+  LogOut, ChevronDown, CreditCard, ScrollText, Receipt, Activity, TrendingUp, Calculator,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
@@ -19,6 +19,7 @@ const NAV = [
   { to: '/invoices',  icon: Receipt,   label: 'Factures' },
   { to: '/audit',      icon: Activity,    label: 'Journal d\'audit' },
   { to: '/simulation', icon: TrendingUp,  label: 'Simulation marge' },
+  { to: '/chiffrage',  icon: Calculator,  label: 'Chiffrage', badge: 'Pro' },
 ];
 
 const ROLE_LABELS = {
@@ -58,7 +59,7 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        {NAV.map(({ to, icon: Icon, label }) => (
+        {NAV.map(({ to, icon: Icon, label, badge }) => (
           <NavLink
             key={to}
             to={to}
@@ -71,7 +72,12 @@ export default function Sidebar() {
             }
           >
             <Icon className="w-4 h-4 shrink-0" />
-            {label}
+            <span className="flex-1">{label}</span>
+            {badge && (
+              <span className="text-xs px-1.5 py-0.5 rounded font-semibold bg-violet-600/20 text-violet-400 border border-violet-600/30">
+                {badge}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>

@@ -122,4 +122,20 @@ router.post('/newsletter', masterKeyAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── POST /api/admin/addon — Activer un add-on manuellement ──────────────────
+router.post('/addon', masterKeyAuth, async (req, res) => {
+  try {
+    const { company_id, addon_id, action } = req.body; // action: 'activate' | 'deactivate'
+    if (!company_id || !addon_id) return res.status(400).json({ error: 'company_id et addon_id requis' });
+
+    const { activateAddon, deactivateAddon } = require('./addons');
+    if (action === 'deactivate') {
+      await deactivateAddon(parseInt(company_id), addon_id);
+    } else {
+      await activateAddon(parseInt(company_id), addon_id, null);
+    }
+    res.json({ success: true, action: action || 'activate', company_id, addon_id });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
