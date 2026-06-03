@@ -3,6 +3,8 @@ const router = require('express').Router();
 const { db } = require('../db/database');
 const { requireWriter } = require('../middleware/auth');
 const { randomUUID } = require('crypto');
+const { sendSystemEmail } = require('../utils/systemEmail');
+const templates = require('../utils/emailTemplates');
 
 router.get('/', async (req, res) => {
   try {
@@ -75,6 +77,41 @@ router.delete('/:id/portal-token', requireWriter, async (req, res) => {
     if (!client) return res.status(404).json({ error: 'Client non trouvé' });
     await db.run('UPDATE clients SET portal_token = NULL WHERE id = ?', [client.id]);
     res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Portail client : envoi par email ────────────────────────────────────────
+// Génère le token si besoin, puis envoie le lien au client par email
+router.post('/:id/portal-send', requireWriter, async (req, res) => {
+  try {
+    const client = await db.get(
+      'SELECT c.*, co.name AS company_name FROM clients c JOIN companies co ON co.id = c.company_id WHERE c.id = ? AND c.company_id = ?',
+      [req.params.id, req.user.companyId]
+    );
+    if (!client) return res.status(404).json({ error: 'Client non trouvé' });
+    if (!client.email) return res.status(400).json({ error: 'Ce client n\'a pas d\'adresse email renseignée' });
+
+    // Générer ou réutiliser le token
+    let token = client.portal_token;
+    if (!token) {
+      token = randomUUID();
+      await db.run('UPDATE clients SET portal_token = ? WHERE id = ?', [token, client.id]);
+    }
+
+    const appUrl = process.env.APP_URL || 'https://securoplan.vercel.app';
+    const portalUrl = `${appUrl}/portal/${token}`;
+
+    await sendSystemEmail({
+      to: client.email,
+      subject: `Votre espace planning — ${client.company_name}`,
+      html: templates.clientPortalLink({
+        clientName:  client.name,
+        companyName: client.company_name,
+        portalUrl,
+      }),
+    });
+
+    res.json({ token, url: portalUrl, sent_to: client.email });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

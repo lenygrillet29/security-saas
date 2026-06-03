@@ -239,4 +239,25 @@ function contractSignRequest({ agentName, companyName, contractType, signUrl }) 
   `);
 }
 
-module.exports = { welcome, trialEnding, paymentSucceeded, paymentFailed, cancellationConfirmed, newFeature, contractSignRequest };
+// ─── Portail client ────────────────────────────────────────────────────────────
+function clientPortalLink({ clientName, companyName, portalUrl }) {
+  return base(`Votre espace planning — ${companyName}`, `
+    <h1 style="color:white;font-size:22px;margin:0 0 12px;">Votre espace planning 📅</h1>
+    <p style="color:#94a3b8;font-size:14px;margin:0 0 12px;line-height:1.6;">
+      Bonjour,
+    </p>
+    <p style="color:#94a3b8;font-size:14px;margin:0 0 28px;line-height:1.6;">
+      <strong style="color:white;">${companyName}</strong> vous donne accès à votre espace de suivi des prestations.
+      Vous pouvez consulter en temps réel les agents planifiés sur vos sites.
+    </p>
+
+    ${btn('Voir mon planning →', portalUrl, '#10b981')}
+
+    <p style="color:#475569;font-size:12px;margin:20px 0 0;text-align:center;line-height:1.8;">
+      Ce lien est personnel et réservé à <strong style="color:#64748b;">${clientName}</strong>.<br>
+      Enregistrez-le dans vos favoris pour y accéder à tout moment.
+    </p>
+  `);
+}
+
+module.exports = { welcome, trialEnding, paymentSucceeded, paymentFailed, cancellationConfirmed, newFeature, contractSignRequest, clientPortalLink };

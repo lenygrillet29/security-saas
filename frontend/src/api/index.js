@@ -231,5 +231,6 @@ export const checkinApi = {
 // Portail client
 export const portalApi = {
   generate: (clientId) => post(`/clients/${clientId}/portal-token`, {}),
+  send:     (clientId) => post(`/clients/${clientId}/portal-send`,  {}),
   revoke:   (clientId) => del(`/clients/${clientId}/portal-token`),
 };

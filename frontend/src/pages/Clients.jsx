@@ -115,11 +115,18 @@ function ClientsInner() {
   async function handlePortal(client) {
     setPortalLoading(client.id);
     try {
-      const { url } = await portalApi.generate(client.id);
-      // Mettre à jour localement
-      setClients(prev => prev.map(c => c.id === client.id ? { ...c, portal_token: url.split('/portal/')[1] } : c));
-      await navigator.clipboard.writeText(url);
-      toast(`Lien copié dans le presse-papier`);
+      if (client.email) {
+        // Client a un email → envoi automatique
+        const { token, sent_to } = await portalApi.send(client.id);
+        setClients(prev => prev.map(c => c.id === client.id ? { ...c, portal_token: token } : c));
+        toast(`Lien envoyé à ${sent_to} ✉️`);
+      } else {
+        // Pas d'email → copier le lien dans le presse-papier
+        const { url, token } = await portalApi.generate(client.id);
+        setClients(prev => prev.map(c => c.id === client.id ? { ...c, portal_token: token } : c));
+        await navigator.clipboard.writeText(url);
+        toast('Lien copié (client sans email)');
+      }
     } catch (err) {
       toast(err.message, 'error');
     } finally {
@@ -220,12 +227,22 @@ function ClientsInner() {
                       {/* Portail client */}
                       {client.portal_token ? (
                         <>
-                          <button
-                            onClick={() => { const url = `${window.location.origin}/portal/${client.portal_token}`; navigator.clipboard.writeText(url); toast('Lien copié !'); }}
-                            className="p-1.5 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-600/10 rounded-lg transition-colors"
-                            title="Copier le lien portail">
-                            <Link2 className="w-3.5 h-3.5" />
-                          </button>
+                          {client.email ? (
+                            <button
+                              onClick={() => handlePortal(client)}
+                              disabled={portalLoading === client.id}
+                              className="p-1.5 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-600/10 rounded-lg transition-colors"
+                              title={`Renvoyer le lien par email à ${client.email}`}>
+                              <Mail className="w-3.5 h-3.5" />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => { const url = `${window.location.origin}/portal/${client.portal_token}`; navigator.clipboard.writeText(url); toast('Lien copié !'); }}
+                              className="p-1.5 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-600/10 rounded-lg transition-colors"
+                              title="Copier le lien portail">
+                              <Link2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                           <button
                             onClick={() => window.open(`/portal/${client.portal_token}`, '_blank')}
                             className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-600/10 rounded-lg transition-colors"
@@ -245,8 +262,8 @@ function ClientsInner() {
                           onClick={() => handlePortal(client)}
                           disabled={portalLoading === client.id}
                           className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-600/10 rounded-lg transition-colors"
-                          title="Créer un lien portail client">
-                          <Link2 className="w-3.5 h-3.5" />
+                          title={client.email ? `Envoyer le lien portail à ${client.email}` : 'Créer un lien portail (copier)'}>
+                          {client.email ? <Mail className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
                         </button>
                       )}
                       <button onClick={() => setModal({ client })}
