@@ -306,6 +306,11 @@ async function init() {
     ALTER TABLE companies ADD COLUMN IF NOT EXISTS pack_collab_sub_id TEXT DEFAULT NULL;
   `);
 
+  // ── Portail client (lien public par token) ───────────────────────────────────
+  await pool.query(`
+    ALTER TABLE clients ADD COLUMN IF NOT EXISTS portal_token TEXT UNIQUE;
+  `);
+
   console.log('[DB] PostgreSQL connecté — schéma multi-tenant initialisé');
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, MapPin, Mail, Phone, Search, Download, FileBarChart } from 'lucide-react';
-import { clientsApi, sitesApi, pdfApi, reportApi } from '../api';
+import { Plus, Edit2, Trash2, MapPin, Mail, Phone, Search, Download, FileBarChart, Link2, LinkOff, ExternalLink } from 'lucide-react';
+import { clientsApi, sitesApi, pdfApi, reportApi, portalApi } from '../api';
 import Modal from '../components/Modal';
 import Confirm from '../components/Confirm';
 import { ToastProvider, useToast } from '../components/Toast';
@@ -91,6 +91,7 @@ function ClientsInner() {
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
+  const [portalLoading, setPortalLoading] = useState(null); // clientId en cours
 
   const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd');
   const monthEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd');
@@ -109,6 +110,34 @@ function ClientsInner() {
       toast('Client supprimé');
       load();
     } catch (err) { toast(err.message, 'error'); }
+  }
+
+  async function handlePortal(client) {
+    setPortalLoading(client.id);
+    try {
+      const { url } = await portalApi.generate(client.id);
+      // Mettre à jour localement
+      setClients(prev => prev.map(c => c.id === client.id ? { ...c, portal_token: url.split('/portal/')[1] } : c));
+      await navigator.clipboard.writeText(url);
+      toast(`Lien copié dans le presse-papier`);
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      setPortalLoading(null);
+    }
+  }
+
+  async function handleRevokePortal(client) {
+    setPortalLoading(client.id);
+    try {
+      await portalApi.revoke(client.id);
+      setClients(prev => prev.map(c => c.id === client.id ? { ...c, portal_token: null } : c));
+      toast('Lien portail révoqué');
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      setPortalLoading(null);
+    }
   }
 
   const filtered = clients.filter(c =>
@@ -188,6 +217,38 @@ function ClientsInner() {
                         className="p-1.5 text-slate-400 hover:text-violet-400 hover:bg-violet-600/10 rounded-lg transition-colors" title="Rapport mensuel PDF">
                         <FileBarChart className="w-3.5 h-3.5" />
                       </button>
+                      {/* Portail client */}
+                      {client.portal_token ? (
+                        <>
+                          <button
+                            onClick={() => { const url = `${window.location.origin}/portal/${client.portal_token}`; navigator.clipboard.writeText(url); toast('Lien copié !'); }}
+                            className="p-1.5 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-600/10 rounded-lg transition-colors"
+                            title="Copier le lien portail">
+                            <Link2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => window.open(`/portal/${client.portal_token}`, '_blank')}
+                            className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-600/10 rounded-lg transition-colors"
+                            title="Ouvrir le portail">
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleRevokePortal(client)}
+                            disabled={portalLoading === client.id}
+                            className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-amber-600/10 rounded-lg transition-colors"
+                            title="Révoquer le lien">
+                            <LinkOff className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => handlePortal(client)}
+                          disabled={portalLoading === client.id}
+                          className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-600/10 rounded-lg transition-colors"
+                          title="Créer un lien portail client">
+                          <Link2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       <button onClick={() => setModal({ client })}
                         className="p-1.5 text-slate-400 hover:text-white hover:bg-dark-600 rounded-lg transition-colors">
                         <Edit2 className="w-3.5 h-3.5" />

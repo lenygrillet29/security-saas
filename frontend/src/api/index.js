@@ -227,3 +227,9 @@ export const checkinApi = {
   checkin: (shiftId, coords) => post(`/shifts/${shiftId}/checkin`, coords),
   checkout: (shiftId, coords) => post(`/shifts/${shiftId}/checkout`, coords),
 };
+
+// Portail client
+export const portalApi = {
+  generate: (clientId) => post(`/clients/${clientId}/portal-token`, {}),
+  revoke:   (clientId) => del(`/clients/${clientId}/portal-token`),
+};

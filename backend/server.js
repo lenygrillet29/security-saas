@@ -46,6 +46,9 @@ app.use('/api/auth', require('./routes/auth'));
 // ─── Signature de contrat (public — token dans l'URL) ────────────────────────
 app.use('/api/contracts/sign', require('./routes/contracts'));
 
+// ─── Portail client public (token dans l'URL, pas de JWT) ────────────────────
+app.use('/api/portal', require('./routes/portal'));
+
 // ─── Admin superadmin (protégé par ADMIN_MASTER_KEY, pas JWT) ────────────────
 app.use('/api/admin', require('./routes/admin'));
 

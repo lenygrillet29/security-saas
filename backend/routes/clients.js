@@ -1,7 +1,8 @@
 const express = require('express');
-const router = express.Router();
+const router = require('express').Router();
 const { db } = require('../db/database');
 const { requireWriter } = require('../middleware/auth');
+const { randomUUID } = require('crypto');
 
 router.get('/', async (req, res) => {
   try {
@@ -52,6 +53,27 @@ router.delete('/:id', requireWriter, async (req, res) => {
     const existing = await db.get('SELECT id FROM clients WHERE id = ? AND company_id = ?', [req.params.id, req.user.companyId]);
     if (!existing) return res.status(404).json({ error: 'Client non trouvé' });
     await db.run('DELETE FROM clients WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Portail client : génération / révocation du token ───────────────────────
+router.post('/:id/portal-token', requireWriter, async (req, res) => {
+  try {
+    const client = await db.get('SELECT id FROM clients WHERE id = ? AND company_id = ?', [req.params.id, req.user.companyId]);
+    if (!client) return res.status(404).json({ error: 'Client non trouvé' });
+    const token = randomUUID();
+    await db.run('UPDATE clients SET portal_token = ? WHERE id = ?', [token, client.id]);
+    const appUrl = process.env.APP_URL || 'https://securoplan.vercel.app';
+    res.json({ token, url: `${appUrl}/portal/${token}` });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/:id/portal-token', requireWriter, async (req, res) => {
+  try {
+    const client = await db.get('SELECT id FROM clients WHERE id = ? AND company_id = ?', [req.params.id, req.user.companyId]);
+    if (!client) return res.status(404).json({ error: 'Client non trouvé' });
+    await db.run('UPDATE clients SET portal_token = NULL WHERE id = ?', [client.id]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

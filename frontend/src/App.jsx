@@ -19,6 +19,7 @@ import Invoices from './pages/Invoices';
 import AuditLog from './pages/AuditLog';
 import Simulation from './pages/Simulation';
 import Chiffrage from './pages/Chiffrage';
+import ClientPortal from './pages/ClientPortal';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -47,6 +48,8 @@ export default function App() {
             <Route path="/register" element={<Register />} />
             {/* Page de signature de contrat (publique) */}
             <Route path="/sign-contract/:token" element={<SignContract />} />
+            {/* Portail client (public, sans compte) */}
+            <Route path="/portal/:token" element={<ClientPortal />} />
 
             {/* Application protégée */}
             <Route
