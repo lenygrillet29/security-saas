@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { CreditCard, CheckCircle, AlertTriangle, XCircle, Clock, RefreshCw, Loader2 } from 'lucide-react';
-import { billingApi } from '../api';
+import { CreditCard, CheckCircle, AlertTriangle, XCircle, Clock, RefreshCw, Loader2, Users, Zap, Lock } from 'lucide-react';
+import { billingApi, addonsApi } from '../api';
 import { useAuth } from '../contexts/AuthContext';
+import { useSearchParams } from 'react-router-dom';
 
 function StatusBadge({ status }) {
   const MAP = {
@@ -28,9 +29,114 @@ function ProgressBar({ value, max, color = 'bg-blue-500' }) {
   );
 }
 
+// ─── Section Packs ────────────────────────────────────────────────────────────
+function PackSection({ packType, packLabel, icon: Icon, addonsData, limits, onCheckout }) {
+  const [upgrading, setUpgrading] = useState(null);
+  if (!addonsData) return null;
+
+  const pack = addonsData.packs?.[packType];
+  if (!pack) return null;
+
+  const current = pack.current;
+  const limit = pack.totalLimit === Infinity ? null : pack.totalLimit;
+  const count = limits?.[packType]?.count ?? 0;
+  const pct = limit === null ? 0 : Math.min(100, Math.round(count / limit * 100));
+  const isNearLimit = pct >= 80;
+  const isAtLimit = limit !== null && count >= limit;
+
+  async function handleUpgrade(tierId) {
+    setUpgrading(tierId);
+    try {
+      const { url } = await addonsApi.checkout(`pack_${packType}_${tierId}`);
+      window.location.href = url;
+    } catch (err) {
+      alert(err.message);
+      setUpgrading(null);
+    }
+  }
+
+  return (
+    <div className="bg-dark-800 border border-dark-600 rounded-xl p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <Icon className="w-4 h-4 text-blue-400" />
+        <h3 className="text-sm font-semibold text-white">{packLabel}</h3>
+        {current && (
+          <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-blue-600/20 text-blue-400 border border-blue-600/30 font-medium capitalize">
+            {current}
+          </span>
+        )}
+      </div>
+
+      {/* Usage bar */}
+      {limit !== null && limit !== Infinity && (
+        <div className="mb-4">
+          <div className="flex justify-between text-xs mb-1.5">
+            <span className={isAtLimit ? 'text-red-400' : isNearLimit ? 'text-amber-400' : 'text-slate-400'}>
+              {count} / {limit} utilisé(s)
+            </span>
+            {isAtLimit && <span className="text-red-400 font-medium">⚠ Limite atteinte</span>}
+          </div>
+          <ProgressBar value={count} max={limit} color={isAtLimit ? 'bg-red-500' : isNearLimit ? 'bg-amber-500' : 'bg-blue-500'} />
+        </div>
+      )}
+      {(limit === null || limit === Infinity) && (
+        <div className="mb-4 text-xs text-emerald-400 flex items-center gap-1.5">
+          <CheckCircle className="w-3.5 h-3.5" /> Illimité — {count} actif(s)
+        </div>
+      )}
+
+      {/* Tiers */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {pack.tiers.map(tier => {
+          const isActive = current === tier.id;
+          return (
+            <div key={tier.id}
+              className={`rounded-lg border p-3 text-center transition-colors ${
+                isActive ? 'border-blue-500/60 bg-blue-500/10' : 'border-dark-500 bg-dark-700'
+              }`}
+            >
+              <div className={`text-xs font-semibold mb-0.5 ${isActive ? 'text-blue-300' : 'text-slate-300'}`}>
+                {tier.label}
+              </div>
+              <div className="text-lg font-bold text-white">
+                {tier.totalLimit === Infinity ? '∞' : `+${tier.extra}`}
+              </div>
+              <div className="text-xs text-slate-500 mb-2">
+                {tier.totalLimit === Infinity ? 'illimité' : (packType === 'agents' ? 'agents' : 'collabs')}
+              </div>
+              {isActive ? (
+                <span className="text-xs text-blue-400 font-medium">✓ Actif</span>
+              ) : !tier.configured ? (
+                <span className="text-xs text-slate-500 flex items-center justify-center gap-1">
+                  <Lock className="w-2.5 h-2.5" /> Bientôt
+                </span>
+              ) : (
+                <button
+                  onClick={() => handleUpgrade(tier.id)}
+                  disabled={upgrading === tier.id}
+                  className="w-full text-xs py-1 px-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors disabled:opacity-50"
+                >
+                  {upgrading === tier.id ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : `${tier.price} €/mois`}
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="text-xs text-slate-500 mt-3">
+        Base incluse : {pack.baseLimit} {packType === 'agents' ? 'agent(s)' : 'collaborateur(s)'}
+      </p>
+    </div>
+  );
+}
+
 export default function Billing() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const [data, setData] = useState(null);
+  const [addonsData, setAddonsData] = useState(null);
+  const [limits, setLimits] = useState(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState('');
@@ -39,8 +145,14 @@ export default function Billing() {
   const load = async () => {
     try {
       setLoading(true);
-      const res = await billingApi.getSubscription();
-      setData(res);
+      const [sub, addons, lim] = await Promise.all([
+        billingApi.getSubscription(),
+        addonsApi.list().catch(() => null),
+        addonsApi.limits().catch(() => null),
+      ]);
+      setData(sub);
+      setAddonsData(addons);
+      setLimits(lim);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -48,7 +160,13 @@ export default function Billing() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    // Succès pack depuis Stripe
+    if (searchParams.get('pack_success')) {
+      setSuccess('✅ Pack activé avec succès !');
+    }
+  }, []);
 
   const handleCancel = async () => {
     if (!window.confirm('Confirmer la résiliation avec 30 jours de préavis ?')) return;
@@ -264,6 +382,27 @@ export default function Billing() {
               </div>
             </div>
           )}
+
+          {/* ── Packs agents + collaborateurs ─────────────────────────────── */}
+          <div className="space-y-4 pt-2">
+            <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+              <Zap className="w-4 h-4 text-violet-400" /> Options &amp; Packs
+            </h2>
+            <PackSection
+              packType="agents"
+              packLabel="Pack Agents"
+              icon={Users}
+              addonsData={addonsData}
+              limits={limits}
+            />
+            <PackSection
+              packType="collab"
+              packLabel="Pack Collaborateurs"
+              icon={CreditCard}
+              addonsData={addonsData}
+              limits={limits}
+            />
+          </div>
 
           {/* Paiement en retard */}
           {data.plan_status === 'past_due' && (

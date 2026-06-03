@@ -300,6 +300,10 @@ async function init() {
   await pool.query(`
     ALTER TABLE companies ADD COLUMN IF NOT EXISTS addons TEXT DEFAULT '[]';
     ALTER TABLE companies ADD COLUMN IF NOT EXISTS addon_chiffrage_subscription_id TEXT;
+    ALTER TABLE companies ADD COLUMN IF NOT EXISTS pack_agents TEXT DEFAULT NULL;
+    ALTER TABLE companies ADD COLUMN IF NOT EXISTS pack_collab TEXT DEFAULT NULL;
+    ALTER TABLE companies ADD COLUMN IF NOT EXISTS pack_agents_sub_id TEXT DEFAULT NULL;
+    ALTER TABLE companies ADD COLUMN IF NOT EXISTS pack_collab_sub_id TEXT DEFAULT NULL;
   `);
 
   console.log('[DB] PostgreSQL connecté — schéma multi-tenant initialisé');

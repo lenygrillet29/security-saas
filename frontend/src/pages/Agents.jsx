@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, Phone, Mail, Search, Download, Archive, ArchiveRestore, Send } from 'lucide-react';
-import { agentsApi, shiftsApi, pdfApi, emailApi } from '../api';
+import { Plus, Edit2, Trash2, Phone, Mail, Search, Download, Archive, ArchiveRestore, Send, AlertTriangle, Zap } from 'lucide-react';
+import { agentsApi, shiftsApi, pdfApi, emailApi, addonsApi } from '../api';
+import { useNavigate } from 'react-router-dom';
 import Modal from '../components/Modal';
 import Confirm from '../components/Confirm';
 import { ToastProvider, useToast } from '../components/Toast';
@@ -112,6 +113,7 @@ function AgentForm({ agent, onSave, onClose }) {
 
 function AgentsInner() {
   const toast = useToast();
+  const navigate = useNavigate();
   const [agents, setAgents] = useState([]);
   const [search, setSearch] = useState('');
   const [showArchived, setShowArchived] = useState(false);
@@ -119,6 +121,7 @@ function AgentsInner() {
   const [deleteId, setDeleteId] = useState(null);
   const [archiveId, setArchiveId] = useState(null);
   const [monthStats, setMonthStats] = useState({});
+  const [limits, setLimits] = useState(null);
 
   const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd');
   const monthEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd');
@@ -132,7 +135,10 @@ function AgentsInner() {
     setMonthStats(Object.fromEntries(stats.map(s => [s.agent_id, s])));
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    addonsApi.limits().then(setLimits).catch(() => {});
+  }, []);
 
   async function handleDelete() {
     try {
@@ -196,6 +202,32 @@ function AgentsInner() {
           </button>
           <span className="text-xs text-slate-500">{filtered.length} agent(s)</span>
         </div>
+
+        {/* Bannière limite agents */}
+        {limits?.agents && (
+          limits.agents.exceeded ? (
+            <div className="mb-4 flex items-center gap-3 bg-red-900/30 border border-red-600/40 rounded-lg px-4 py-3">
+              <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+              <div className="flex-1 text-sm">
+                <span className="text-red-300 font-medium">Limite atteinte</span>
+                <span className="text-red-400/80"> — {limits.agents.count}/{limits.agents.limit} agents actifs</span>
+              </div>
+              <button onClick={() => navigate('/billing')} className="flex items-center gap-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-500 px-3 py-1.5 rounded-lg transition-colors">
+                <Zap className="w-3 h-3" /> Upgrade
+              </button>
+            </div>
+          ) : limits.agents.count >= Math.ceil((limits.agents.limit ?? 5) * 0.8) && limits.agents.limit !== null ? (
+            <div className="mb-4 flex items-center gap-3 bg-amber-900/20 border border-amber-600/30 rounded-lg px-4 py-3">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+              <div className="flex-1 text-sm text-amber-300">
+                {limits.agents.count}/{limits.agents.limit} agents actifs — vous approchez de la limite
+              </div>
+              <button onClick={() => navigate('/billing')} className="text-xs text-amber-400 hover:text-white transition-colors">
+                Voir les packs →
+              </button>
+            </div>
+          ) : null
+        )}
 
         <div className="overflow-x-auto">
           <table className="w-full">

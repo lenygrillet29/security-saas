@@ -160,9 +160,10 @@ export const simulationApi = {
   margin: (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/shifts/stats/margin${q ? `?${q}` : ''}`); },
 };
 
-// Add-ons
+// Add-ons & Packs
 export const addonsApi = {
   list: () => get('/addons'),
+  limits: () => get('/addons/limits'),
   checkout: (addonId) => post(`/addons/checkout/${addonId}`, {}),
   cancel: (addonId) => post(`/addons/cancel/${addonId}`, {}),
 };

@@ -3,6 +3,7 @@ const router = express.Router();
 const { db } = require('../db/database');
 const { requireWriter } = require('../middleware/auth');
 const { logAudit } = require('../utils/audit');
+const { checkAgentLimit } = require('./addons');
 
 router.get('/', async (req, res) => {
   try {
@@ -63,6 +64,18 @@ router.post('/', requireWriter, async (req, res) => {
   try {
     const { first_name, last_name, email, phone, employee_number, contract_type, hourly_rate, color, notes } = req.body;
     if (!first_name || !last_name) return res.status(400).json({ error: 'Prénom et nom requis' });
+
+    // Vérification limite pack agents
+    const limitCheck = await checkAgentLimit(req.user.companyId);
+    if (!limitCheck.ok) {
+      return res.status(403).json({
+        error: `Limite atteinte : ${limitCheck.count}/${limitCheck.limit} agents actifs. Passez au pack supérieur pour en ajouter davantage.`,
+        limit_reached: true,
+        count: limitCheck.count,
+        limit: limitCheck.limit,
+        pack:  limitCheck.pack,
+      });
+    }
     const result = await db.insert(
       `INSERT INTO agents (company_id, first_name, last_name, email, phone, employee_number, contract_type, hourly_rate, color, notes)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,

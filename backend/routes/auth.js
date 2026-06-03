@@ -246,6 +246,18 @@ router.post('/users', requireAuth, requireRole('admin'), async (req, res) => {
     const existing = await db.get('SELECT id FROM users WHERE email = ?', [email.toLowerCase()]);
     if (existing) return res.status(409).json({ error: 'Cet email est déjà utilisé' });
 
+    // Vérification limite pack collaborateurs
+    const { checkCollabLimit } = require('./addons');
+    const limitCheck = await checkCollabLimit(req.user.companyId);
+    if (!limitCheck.ok) {
+      return res.status(403).json({
+        error: `Limite atteinte : ${limitCheck.count}/${limitCheck.limit} utilisateurs actifs. Passez au pack collaborateurs supérieur.`,
+        limit_reached: true,
+        count: limitCheck.count,
+        limit: limitCheck.limit,
+      });
+    }
+
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
     const result = await db.insert(
       `INSERT INTO users (company_id, email, password_hash, first_name, last_name, role)
