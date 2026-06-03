@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, Search, Calendar, Filter } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Calendar, UserCheck, X } from 'lucide-react';
 import { absencesApi, agentsApi } from '../api';
 import Modal from '../components/Modal';
 import Confirm from '../components/Confirm';
@@ -96,6 +96,87 @@ function daysBetween(start, end) {
   return Math.ceil((e - s) / (1000 * 60 * 60 * 24)) + 1;
 }
 
+// ─── Popup remplaçants disponibles ───────────────────────────────────────────
+function ReplacementPopup({ absence, onClose }) {
+  const [available, setAvailable] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    agentsApi.available({
+      start_date: absence.start_date,
+      end_date: absence.end_date,
+      exclude_agent_id: absence.agent_id,
+    }).then(data => { setAvailable(data); setLoading(false); })
+      .catch(() => { setAvailable([]); setLoading(false); });
+  }, []);
+
+  const days = Math.ceil((new Date(absence.end_date) - new Date(absence.start_date)) / (1000 * 60 * 60 * 24)) + 1;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-dark-800 border border-dark-600 rounded-xl shadow-2xl w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="font-semibold text-white flex items-center gap-2">
+              <UserCheck className="w-4 h-4 text-emerald-400" />
+              Remplaçants disponibles
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Pour <span className="text-white font-medium">{absence.first_name} {absence.last_name}</span> — {days}j
+              ({new Date(absence.start_date).toLocaleDateString('fr-FR')} → {new Date(absence.end_date).toLocaleDateString('fr-FR')})
+            </p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        {loading ? (
+          <div className="text-center text-slate-400 py-6 text-sm">Recherche en cours...</div>
+        ) : available.length === 0 ? (
+          <div className="text-center py-6">
+            <div className="text-slate-400 text-sm">Aucun agent disponible sur cette période.</div>
+            <div className="text-xs text-slate-500 mt-1">Tous les agents ont des prestations ou des absences prévues.</div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-xs text-slate-500 mb-3">{available.length} agent(s) sans prestation ni absence sur cette période :</p>
+            {available.map(a => (
+              <div key={a.id} className="flex items-center gap-3 bg-dark-700 rounded-lg px-3 py-2.5">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+                  style={{ backgroundColor: a.color || '#3B82F6' }}>
+                  {a.first_name[0]}{a.last_name[0]}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-white">{a.first_name} {a.last_name}</div>
+                  <div className="flex items-center gap-3 text-xs text-slate-400">
+                    <span>{a.contract_type}</span>
+                    {a.hourly_rate > 0 && <span>{a.hourly_rate}€/h</span>}
+                    {a.phone && <span>{a.phone}</span>}
+                  </div>
+                </div>
+                {a.email && (
+                  <a href={`mailto:${a.email}`} className="p-1.5 text-slate-400 hover:text-blue-400 transition-colors" title={a.email}>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                  </a>
+                )}
+                {a.phone && (
+                  <a href={`tel:${a.phone}`} className="p-1.5 text-slate-400 hover:text-emerald-400 transition-colors">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                    </svg>
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AbsencesInner() {
   const toast = useToast();
   const [absences, setAbsences] = useState([]);
@@ -105,6 +186,7 @@ function AbsencesInner() {
   const [filterAgent, setFilterAgent] = useState('');
   const [modal, setModal] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
+  const [replacementAbsence, setReplacementAbsence] = useState(null);
 
   async function load() {
     const [ab, ag] = await Promise.all([absencesApi.list(), agentsApi.list()]);
@@ -223,6 +305,11 @@ function AbsencesInner() {
                     <td className="py-3 px-3 text-xs text-slate-400 max-w-[150px] truncate">{ab.notes || '—'}</td>
                     <td className="py-3 px-3">
                       <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => setReplacementAbsence(ab)}
+                          className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-600/10 rounded-lg transition-colors"
+                          title="Trouver un remplaçant">
+                          <UserCheck className="w-3.5 h-3.5" />
+                        </button>
                         <button onClick={() => setModal({ absence: ab })}
                           className="p-1.5 text-slate-400 hover:text-white hover:bg-dark-600 rounded-lg transition-colors">
                           <Edit2 className="w-3.5 h-3.5" />
@@ -251,6 +338,9 @@ function AbsencesInner() {
       )}
       {deleteId && (
         <Confirm title="Supprimer l'absence" message="Supprimer cette absence ?" onConfirm={handleDelete} onClose={() => setDeleteId(null)} />
+      )}
+      {replacementAbsence && (
+        <ReplacementPopup absence={replacementAbsence} onClose={() => setReplacementAbsence(null)} />
       )}
     </div>
   );

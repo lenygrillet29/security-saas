@@ -18,6 +18,39 @@ router.get('/', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── Agents disponibles sur une période (sans shift ni absence) ───────────────
+router.get('/available', async (req, res) => {
+  try {
+    const { start_date, end_date, exclude_agent_id } = req.query;
+    if (!start_date || !end_date) return res.status(400).json({ error: 'start_date et end_date requis' });
+
+    // Agents actifs de la société
+    const agents = await db.all(
+      'SELECT * FROM agents WHERE company_id = ? AND active = 1 ORDER BY last_name, first_name',
+      [req.user.companyId]
+    );
+
+    // Agents ayant un shift sur la période
+    const busyShifts = await db.all(
+      `SELECT DISTINCT agent_id FROM shifts
+       WHERE company_id = ? AND date >= ? AND date <= ?`,
+      [req.user.companyId, start_date, end_date]
+    );
+    const busyAbsences = await db.all(
+      `SELECT DISTINCT agent_id FROM absences
+       WHERE company_id = ? AND status != 'rejected' AND start_date <= ? AND end_date >= ?`,
+      [req.user.companyId, end_date, start_date]
+    );
+    const busyIds = new Set([
+      ...busyShifts.map(r => r.agent_id),
+      ...busyAbsences.map(r => r.agent_id),
+    ]);
+    if (exclude_agent_id) busyIds.add(parseInt(exclude_agent_id));
+
+    res.json(agents.filter(a => !busyIds.has(a.id)));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const agent = await db.get('SELECT * FROM agents WHERE id = ? AND company_id = ?', [req.params.id, req.user.companyId]);

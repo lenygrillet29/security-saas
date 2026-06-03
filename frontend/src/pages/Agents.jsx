@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, User, Phone, Mail, Search, Download } from 'lucide-react';
-import { agentsApi, shiftsApi, pdfApi } from '../api';
+import { Plus, Edit2, Trash2, Phone, Mail, Search, Download, Archive, ArchiveRestore, Send } from 'lucide-react';
+import { agentsApi, shiftsApi, pdfApi, emailApi } from '../api';
 import Modal from '../components/Modal';
 import Confirm from '../components/Confirm';
 import { ToastProvider, useToast } from '../components/Toast';
@@ -114,8 +114,10 @@ function AgentsInner() {
   const toast = useToast();
   const [agents, setAgents] = useState([]);
   const [search, setSearch] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
   const [modal, setModal] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
+  const [archiveId, setArchiveId] = useState(null);
   const [monthStats, setMonthStats] = useState({});
 
   const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd');
@@ -142,10 +144,33 @@ function AgentsInner() {
     }
   }
 
-  const filtered = agents.filter(a =>
-    `${a.first_name} ${a.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
-    (a.employee_number || '').includes(search)
-  );
+  async function handleArchive(agent) {
+    try {
+      if (agent.active) {
+        await agentsApi.archive(agent.id);
+        toast(`${agent.first_name} ${agent.last_name} archivé`);
+      } else {
+        await agentsApi.unarchive(agent.id);
+        toast(`${agent.first_name} ${agent.last_name} réactivé`);
+      }
+      load();
+    } catch (err) { toast(err.message, 'error'); }
+  }
+
+  async function handleSendPlanning(agent) {
+    if (!agent.email) return toast('Cet agent n\'a pas d\'email', 'error');
+    try {
+      await emailApi.sendAgentPlanning(agent.id, { start_date: monthStart, end_date: monthEnd });
+      toast(`Planning envoyé à ${agent.email}`);
+    } catch (err) { toast(err.message, 'error'); }
+  }
+
+  const filtered = agents.filter(a => {
+    const matchSearch = `${a.first_name} ${a.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
+      (a.employee_number || '').includes(search);
+    const matchArchived = showArchived ? true : a.active;
+    return matchSearch && matchArchived;
+  });
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -157,11 +182,18 @@ function AgentsInner() {
       </div>
 
       <div className="card p-4">
-        <div className="flex items-center gap-3 mb-4">
+        <div className="flex items-center gap-3 mb-4 flex-wrap">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input className="input pl-9" placeholder="Rechercher un agent..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
+          <button
+            onClick={() => setShowArchived(s => !s)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm border transition-colors ${showArchived ? 'bg-slate-600/20 border-slate-500 text-slate-300' : 'border-dark-500 text-slate-400 hover:text-slate-200'}`}
+          >
+            <Archive className="w-4 h-4" />
+            {showArchived ? 'Masquer archivés' : 'Voir archivés'}
+          </button>
           <span className="text-xs text-slate-500">{filtered.length} agent(s)</span>
         </div>
 
@@ -224,9 +256,23 @@ function AgentsInner() {
                         <button
                           onClick={() => pdfApi.agentPlanning(agent.id, { start_date: monthStart, end_date: monthEnd })}
                           className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-600/10 rounded-lg transition-colors"
-                          title="Exporter planning"
+                          title="Télécharger planning PDF"
                         >
                           <Download className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleSendPlanning(agent)}
+                          className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-600/10 rounded-lg transition-colors"
+                          title="Envoyer planning par email"
+                        >
+                          <Send className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleArchive(agent)}
+                          className={`p-1.5 rounded-lg transition-colors ${agent.active ? 'text-slate-400 hover:text-amber-400 hover:bg-amber-600/10' : 'text-amber-400 hover:text-emerald-400 hover:bg-emerald-600/10'}`}
+                          title={agent.active ? 'Archiver' : 'Réactiver'}
+                        >
+                          {agent.active ? <Archive className="w-3.5 h-3.5" /> : <ArchiveRestore className="w-3.5 h-3.5" />}
                         </button>
                         <button
                           onClick={() => setModal({ agent })}

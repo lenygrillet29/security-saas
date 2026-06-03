@@ -70,4 +70,46 @@ router.post('/quote/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── Envoi planning en masse (tous les agents actifs avec email) ──────────────
+router.post('/planning/bulk', async (req, res) => {
+  try {
+    const { start_date, end_date, subject, message } = req.body;
+    if (!start_date || !end_date) return res.status(400).json({ error: 'start_date et end_date requis' });
+
+    const agents = await db.all(
+      'SELECT * FROM agents WHERE company_id = ? AND active = 1 AND email IS NOT NULL AND email != ""',
+      [req.user.companyId]
+    );
+
+    const settings = await getSettings(req.user.companyId);
+    const results = { sent: 0, failed: 0, errors: [] };
+
+    for (const agent of agents) {
+      try {
+        const shifts = await db.all(`
+          SELECT sh.*, s.name as site_name FROM shifts sh JOIN sites s ON sh.site_id = s.id
+          WHERE sh.agent_id = ? AND sh.company_id = ? AND sh.date >= ? AND sh.date <= ?
+          ORDER BY sh.date
+        `, [agent.id, req.user.companyId, start_date, end_date]);
+
+        const doc = generateAgentPlanning(settings, agent, shifts, start_date, end_date);
+        const pdfBuffer = await pdfToBuffer(doc);
+
+        await sendEmail(settings, {
+          to: agent.email,
+          subject: subject || `Planning ${agent.first_name} ${agent.last_name}`,
+          html: `<p>${message || 'Veuillez trouver ci-joint votre planning.'}</p>`,
+          attachments: [{ filename: `planning_${agent.last_name}.pdf`, content: pdfBuffer }],
+        });
+        results.sent++;
+      } catch (err) {
+        results.failed++;
+        results.errors.push(`${agent.first_name} ${agent.last_name}: ${err.message}`);
+      }
+    }
+
+    res.json(results);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

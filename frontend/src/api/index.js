@@ -55,6 +55,9 @@ export const agentsApi = {
   create: (data) => post('/agents', data),
   update: (id, data) => put(`/agents/${id}`, data),
   delete: (id) => del(`/agents/${id}`),
+  archive: (id) => post(`/agents/${id}/archive`, {}),
+  unarchive: (id) => post(`/agents/${id}/unarchive`, {}),
+  available: (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/agents/available${q ? `?${q}` : ''}`); },
 };
 
 // Clients
@@ -148,7 +151,13 @@ export const pdfApi = {
 // Email
 export const emailApi = {
   sendAgentPlanning: (id, data) => post(`/email/planning/agent/${id}`, data),
+  sendBulkPlanning: (data) => post('/email/planning/bulk', data),
   sendQuote: (id, data) => post(`/email/quote/${id}`, data),
+};
+
+// Simulation marge
+export const simulationApi = {
+  margin: (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/shifts/stats/margin${q ? `?${q}` : ''}`); },
 };
 
 // Billing

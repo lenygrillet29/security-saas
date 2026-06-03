@@ -17,6 +17,7 @@ import Contracts from './pages/Contracts';
 import SignContract from './pages/SignContract';
 import Invoices from './pages/Invoices';
 import AuditLog from './pages/AuditLog';
+import Simulation from './pages/Simulation';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -66,6 +67,7 @@ export default function App() {
               <Route path="contracts" element={<Contracts />} />
               <Route path="invoices"  element={<Invoices />} />
               <Route path="audit"     element={<AuditLog />} />
+              <Route path="simulation" element={<Simulation />} />
               <Route path="settings" element={<Settings />} />
               <Route path="billing" element={<Billing />} />
             </Route>

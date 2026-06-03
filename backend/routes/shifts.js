@@ -235,4 +235,72 @@ router.post('/:id/checkout', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── Simulation planning & marge ─────────────────────────────────────────────
+// GET /api/shifts/stats/margin?start_date=&end_date=
+router.get('/stats/margin', async (req, res) => {
+  try {
+    const { start_date, end_date } = req.query;
+    const rows = await db.all(`
+      SELECT
+        sh.date,
+        sh.start_time, sh.end_time,
+        sh.hours_day, sh.hours_night, sh.hours_sunday,
+        a.first_name, a.last_name,
+        COALESCE(a.hourly_rate, 0) AS agent_rate,
+        s.name AS site_name,
+        COALESCE(s.hourly_rate_day,    set_day.value::numeric,    0) AS rate_day,
+        COALESCE(s.hourly_rate_night,  set_night.value::numeric,  0) AS rate_night,
+        COALESCE(s.hourly_rate_sunday, set_sun.value::numeric,    0) AS rate_sunday,
+        c.name AS client_name
+      FROM shifts sh
+      JOIN agents  a ON sh.agent_id  = a.id
+      JOIN sites   s ON sh.site_id   = s.id
+      JOIN clients c ON s.client_id  = c.id
+      LEFT JOIN settings set_day   ON set_day.company_id   = sh.company_id AND set_day.key   = 'hourly_rate_day'
+      LEFT JOIN settings set_night ON set_night.company_id = sh.company_id AND set_night.key = 'hourly_rate_night'
+      LEFT JOIN settings set_sun   ON set_sun.company_id   = sh.company_id AND set_sun.key   = 'hourly_rate_sunday'
+      WHERE sh.company_id = ? AND sh.date >= ? AND sh.date <= ?
+      ORDER BY sh.date, sh.start_time
+    `, [req.user.companyId, start_date || '2000-01-01', end_date || '2099-12-31']);
+
+    // Calcul des totaux
+    let totalRevenue = 0, totalCost = 0;
+    const byAgent = {};
+
+    const result = rows.map(r => {
+      const revenue = r.hours_day * r.rate_day + r.hours_night * r.rate_night + r.hours_sunday * r.rate_sunday;
+      const totalH = r.hours_day + r.hours_night + r.hours_sunday;
+      const cost = totalH * r.agent_rate;
+      const margin = revenue - cost;
+      totalRevenue += revenue;
+      totalCost += cost;
+
+      const key = `${r.first_name} ${r.last_name}`;
+      if (!byAgent[key]) byAgent[key] = { name: key, revenue: 0, cost: 0, hours: 0 };
+      byAgent[key].revenue += revenue;
+      byAgent[key].cost += cost;
+      byAgent[key].hours += totalH;
+
+      return { ...r, revenue: Math.round(revenue * 100) / 100, cost: Math.round(cost * 100) / 100, margin: Math.round(margin * 100) / 100, total_hours: Math.round(totalH * 100) / 100 };
+    });
+
+    res.json({
+      shifts: result,
+      summary: {
+        total_revenue: Math.round(totalRevenue * 100) / 100,
+        total_cost: Math.round(totalCost * 100) / 100,
+        total_margin: Math.round((totalRevenue - totalCost) * 100) / 100,
+        margin_pct: totalRevenue > 0 ? Math.round((totalRevenue - totalCost) / totalRevenue * 10000) / 100 : 0,
+        by_agent: Object.values(byAgent).map(a => ({
+          ...a,
+          revenue: Math.round(a.revenue * 100) / 100,
+          cost: Math.round(a.cost * 100) / 100,
+          margin: Math.round((a.revenue - a.cost) * 100) / 100,
+          hours: Math.round(a.hours * 100) / 100,
+        })),
+      },
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

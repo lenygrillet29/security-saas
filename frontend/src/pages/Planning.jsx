@@ -5,7 +5,7 @@ import {
   eachDayOfInterval, isSameDay, parseISO, getDay
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Plus, Download, Mail, Trash2, Edit2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Download, Mail, Trash2, Edit2, Send, Users } from 'lucide-react';
 import { shiftsApi, agentsApi, sitesApi, absencesApi, pdfApi, emailApi } from '../api';
 import Modal from '../components/Modal';
 import Confirm from '../components/Confirm';
@@ -119,53 +119,83 @@ function ExportModal({ onClose, agents, sites }) {
     }
   }
 
+  const [bulkSending, setBulkSending] = useState(false);
+
+  async function handleBulkEmail() {
+    setBulkSending(true);
+    try {
+      const res = await emailApi.sendBulkPlanning({ start_date: startDate, end_date: endDate });
+      toast(`Plannings envoyés : ${res.sent} succès, ${res.failed} échec(s)`);
+      onClose();
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally { setBulkSending(false); }
+  }
+
   return (
-    <Modal title="Export Planning" onClose={onClose} size="md">
+    <Modal title="Export / Envoi Planning" onClose={onClose} size="md">
       <div className="space-y-4">
-        <div>
-          <label className="label">Type d'export</label>
-          <div className="flex gap-2">
-            {['agent', 'site', 'client'].map(t => (
-              <button key={t} onClick={() => { setType(t); setSelectedId(''); }}
-                className={`px-3 py-1.5 rounded-lg text-sm capitalize border transition-colors ${
-                  type === t ? 'bg-blue-600 border-blue-500 text-white' : 'bg-dark-700 border-dark-500 text-slate-300'
-                }`}>
-                {t === 'agent' ? 'Agent' : t === 'site' ? 'Site' : 'Client'}
-              </button>
-            ))}
+        {/* Bulk email banner */}
+        <div className="bg-blue-600/10 border border-blue-600/30 rounded-lg p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <Users className="w-4 h-4 text-blue-400" />
+            <span className="text-sm font-medium text-blue-300">Envoi groupé</span>
           </div>
+          <p className="text-xs text-slate-400 mb-3">Envoie automatiquement le planning par email à <strong className="text-white">tous les agents actifs</strong> ayant une adresse email.</p>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className="label">Date début</label>
+              <input type="date" className="input" value={startDate} onChange={e => setStartDate(e.target.value)} />
+            </div>
+            <div>
+              <label className="label">Date fin</label>
+              <input type="date" className="input" value={endDate} onChange={e => setEndDate(e.target.value)} />
+            </div>
+          </div>
+          <button className="btn-primary w-full" onClick={handleBulkEmail} disabled={bulkSending}>
+            <Send className="w-4 h-4" />
+            {bulkSending ? 'Envoi en cours...' : 'Envoyer à tous les agents'}
+          </button>
         </div>
-        <div>
-          <label className="label">{type === 'agent' ? 'Agent' : type === 'site' ? 'Site' : 'Client'}</label>
-          <select className="input" value={selectedId} onChange={e => setSelectedId(e.target.value)}>
-            <option value="">Sélectionner...</option>
-            {type === 'agent' && agents.map(a => <option key={a.id} value={a.id}>{a.first_name} {a.last_name}</option>)}
-            {type === 'site' && sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
+
+        <div className="border-t border-dark-600 pt-4">
+          <p className="text-xs text-slate-500 mb-3">Ou exporter / envoyer un planning individuel :</p>
           <div>
-            <label className="label">Date début</label>
-            <input type="date" className="input" value={startDate} onChange={e => setStartDate(e.target.value)} />
+            <label className="label">Type d'export</label>
+            <div className="flex gap-2">
+              {['agent', 'site', 'client'].map(t => (
+                <button key={t} onClick={() => { setType(t); setSelectedId(''); }}
+                  className={`px-3 py-1.5 rounded-lg text-sm capitalize border transition-colors ${
+                    type === t ? 'bg-blue-600 border-blue-500 text-white' : 'bg-dark-700 border-dark-500 text-slate-300'
+                  }`}>
+                  {t === 'agent' ? 'Agent' : t === 'site' ? 'Site' : 'Client'}
+                </button>
+              ))}
+            </div>
           </div>
-          <div>
-            <label className="label">Date fin</label>
-            <input type="date" className="input" value={endDate} onChange={e => setEndDate(e.target.value)} />
+          <div className="mt-3">
+            <label className="label">{type === 'agent' ? 'Agent' : type === 'site' ? 'Site' : 'Client'}</label>
+            <select className="input" value={selectedId} onChange={e => setSelectedId(e.target.value)}>
+              <option value="">Sélectionner...</option>
+              {type === 'agent' && agents.map(a => <option key={a.id} value={a.id}>{a.first_name} {a.last_name}</option>)}
+              {type === 'site' && sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
           </div>
+          <div className="flex items-center gap-2 mt-3">
+            <input type="checkbox" id="sendEmail" checked={sendEmail} onChange={e => setSendEmail(e.target.checked)}
+              className="w-4 h-4 rounded border-dark-500 bg-dark-700 accent-blue-500" />
+            <label htmlFor="sendEmail" className="text-sm text-slate-300 cursor-pointer">Envoyer par email</label>
+          </div>
+          {sendEmail && (
+            <div className="mt-3">
+              <label className="label">Email destinataire</label>
+              <input type="email" className="input" value={emailTo} onChange={e => setEmailTo(e.target.value)} placeholder="agent@email.com" />
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          <input type="checkbox" id="sendEmail" checked={sendEmail} onChange={e => setSendEmail(e.target.checked)}
-            className="w-4 h-4 rounded border-dark-500 bg-dark-700 accent-blue-500" />
-          <label htmlFor="sendEmail" className="text-sm text-slate-300 cursor-pointer">Envoyer par email</label>
-        </div>
-        {sendEmail && (
-          <div>
-            <label className="label">Email destinataire</label>
-            <input type="email" className="input" value={emailTo} onChange={e => setEmailTo(e.target.value)} placeholder="agent@email.com" />
-          </div>
-        )}
+
         <div className="flex justify-end gap-2 pt-2">
-          <button className="btn-secondary" onClick={onClose}>Annuler</button>
+          <button className="btn-secondary" onClick={onClose}>Fermer</button>
           <button className="btn-primary" onClick={handleExport}>
             {sendEmail ? <><Mail className="w-4 h-4" /> Envoyer</> : <><Download className="w-4 h-4" /> Exporter PDF</>}
           </button>
