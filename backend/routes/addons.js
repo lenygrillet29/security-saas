@@ -13,7 +13,7 @@ const ADDONS = {
   chiffrage: {
     id:          'chiffrage',
     name:        'Outil de chiffrage',
-    description: 'Calcul automatique des coûts, marges et devis complexes pour vos appels d'offres.',
+    description: "Calcul automatique des coûts, marges et devis complexes pour vos appels d'offres.",
     price:       49,          // €/mois affiché
     priceEnvKey: 'STRIPE_ADDON_CHIFFRAGE_PRICE_ID',
     features:    [
