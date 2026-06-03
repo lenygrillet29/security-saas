@@ -24,6 +24,7 @@ router.post('/', requireWriter, async (req, res) => {
   try {
     const { name, contact_name, email, phone, address, city, postal_code, siret, notes } = req.body;
     if (!name) return res.status(400).json({ error: 'Nom requis' });
+    if (!email) return res.status(400).json({ error: 'Email requis' });
     const result = await db.insert(
       `INSERT INTO clients (company_id, name, contact_name, email, phone, address, city, postal_code, siret, notes)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,

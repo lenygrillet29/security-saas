@@ -64,6 +64,7 @@ router.post('/', requireWriter, async (req, res) => {
   try {
     const { first_name, last_name, email, phone, employee_number, contract_type, hourly_rate, color, notes } = req.body;
     if (!first_name || !last_name) return res.status(400).json({ error: 'Prénom et nom requis' });
+    if (!email) return res.status(400).json({ error: 'Email requis' });
 
     // Vérification limite pack agents
     const limitCheck = await checkAgentLimit(req.user.companyId);

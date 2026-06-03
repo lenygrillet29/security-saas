@@ -47,8 +47,8 @@ function ClientForm({ client, onSave, onClose }) {
           <input className="input" value={form.siret} onChange={e => set('siret', e.target.value)} />
         </div>
         <div>
-          <label className="label">Email</label>
-          <input type="email" className="input" value={form.email} onChange={e => set('email', e.target.value)} />
+          <label className="label">Email *</label>
+          <input type="email" className="input" value={form.email} onChange={e => set('email', e.target.value)} required />
         </div>
         <div>
           <label className="label">Téléphone</label>
