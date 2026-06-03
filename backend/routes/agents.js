@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../db/database');
 const { requireWriter } = require('../middleware/auth');
+const { logAudit } = require('../utils/audit');
 
 router.get('/', async (req, res) => {
   try {
@@ -19,10 +20,7 @@ router.get('/', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
   try {
-    const agent = await db.get(
-      'SELECT * FROM agents WHERE id = ? AND company_id = ?',
-      [req.params.id, req.user.companyId]
-    );
+    const agent = await db.get('SELECT * FROM agents WHERE id = ? AND company_id = ?', [req.params.id, req.user.companyId]);
     if (!agent) return res.status(404).json({ error: 'Agent non trouvé' });
     res.json(agent);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -38,14 +36,16 @@ router.post('/', requireWriter, async (req, res) => {
       [req.user.companyId, first_name, last_name, email || null, phone || null,
         employee_number || null, contract_type || 'CDI', hourly_rate || 0, color || '#3B82F6', notes || null]
     );
-    res.status(201).json(await db.get('SELECT * FROM agents WHERE id = ?', [result.lastInsertRowid]));
+    const agent = await db.get('SELECT * FROM agents WHERE id = ?', [result.lastInsertRowid]);
+    logAudit(req, { action: 'CREATE', entityType: 'agent', entityId: agent.id, entityName: `${first_name} ${last_name}` });
+    res.status(201).json(agent);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.put('/:id', requireWriter, async (req, res) => {
   try {
     const { first_name, last_name, email, phone, employee_number, contract_type, hourly_rate, color, active, notes } = req.body;
-    const existing = await db.get('SELECT id FROM agents WHERE id = ? AND company_id = ?', [req.params.id, req.user.companyId]);
+    const existing = await db.get('SELECT * FROM agents WHERE id = ? AND company_id = ?', [req.params.id, req.user.companyId]);
     if (!existing) return res.status(404).json({ error: 'Agent non trouvé' });
     await db.run(
       `UPDATE agents SET first_name=?, last_name=?, email=?, phone=?, employee_number=?, contract_type=?,
@@ -54,15 +54,39 @@ router.put('/:id', requireWriter, async (req, res) => {
         contract_type || 'CDI', hourly_rate || 0, color || '#3B82F6',
         active !== undefined ? (active ? 1 : 0) : 1, notes || null, req.params.id]
     );
-    res.json(await db.get('SELECT * FROM agents WHERE id = ?', [req.params.id]));
+    const agent = await db.get('SELECT * FROM agents WHERE id = ?', [req.params.id]);
+    logAudit(req, { action: 'UPDATE', entityType: 'agent', entityId: agent.id, entityName: `${agent.first_name} ${agent.last_name}` });
+    res.json(agent);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Archive / Désarchive ─────────────────────────────────────────────────────
+router.post('/:id/archive', requireWriter, async (req, res) => {
+  try {
+    const agent = await db.get('SELECT * FROM agents WHERE id = ? AND company_id = ?', [req.params.id, req.user.companyId]);
+    if (!agent) return res.status(404).json({ error: 'Agent non trouvé' });
+    await db.run('UPDATE agents SET active = 0 WHERE id = ?', [req.params.id]);
+    logAudit(req, { action: 'ARCHIVE', entityType: 'agent', entityId: agent.id, entityName: `${agent.first_name} ${agent.last_name}` });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/:id/unarchive', requireWriter, async (req, res) => {
+  try {
+    const agent = await db.get('SELECT * FROM agents WHERE id = ? AND company_id = ?', [req.params.id, req.user.companyId]);
+    if (!agent) return res.status(404).json({ error: 'Agent non trouvé' });
+    await db.run('UPDATE agents SET active = 1 WHERE id = ?', [req.params.id]);
+    logAudit(req, { action: 'UNARCHIVE', entityType: 'agent', entityId: agent.id, entityName: `${agent.first_name} ${agent.last_name}` });
+    res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.delete('/:id', requireWriter, async (req, res) => {
   try {
-    const existing = await db.get('SELECT id FROM agents WHERE id = ? AND company_id = ?', [req.params.id, req.user.companyId]);
-    if (!existing) return res.status(404).json({ error: 'Agent non trouvé' });
+    const agent = await db.get('SELECT * FROM agents WHERE id = ? AND company_id = ?', [req.params.id, req.user.companyId]);
+    if (!agent) return res.status(404).json({ error: 'Agent non trouvé' });
     await db.run('DELETE FROM agents WHERE id = ?', [req.params.id]);
+    logAudit(req, { action: 'DELETE', entityType: 'agent', entityId: agent.id, entityName: `${agent.first_name} ${agent.last_name}` });
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

@@ -180,6 +180,31 @@ export const invoicesApi = {
   fromQuote: (quoteId) => post(`/invoices/from-quote/${quoteId}`, {}),
 };
 
+// Audit
+export const auditApi = {
+  list: (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/audit${q ? `?${q}` : ''}`); },
+};
+
+// Export CSV (window.open car c'est un téléchargement)
+export const exportApi = {
+  shifts: (start_date, end_date) => {
+    const token = localStorage.getItem('auth_token');
+    window.open(`${BASE}/export/shifts?start_date=${start_date}&end_date=${end_date}&token=${token}`, '_blank');
+  },
+  invoices: (start_date, end_date) => {
+    const token = localStorage.getItem('auth_token');
+    window.open(`${BASE}/export/invoices?start_date=${start_date}&end_date=${end_date}&token=${token}`, '_blank');
+  },
+};
+
+// Rapport mensuel PDF
+export const reportApi = {
+  monthly: (clientId, month) => {
+    const token = localStorage.getItem('auth_token');
+    window.open(`${BASE}/pdf/report/monthly/${clientId}?month=${month}&token=${token}`, '_blank');
+  },
+};
+
 // Shifts check-in/check-out
 export const checkinApi = {
   checkin: (shiftId, coords) => post(`/shifts/${shiftId}/checkin`, coords),

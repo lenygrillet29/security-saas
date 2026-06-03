@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, MapPin, Mail, Phone, Search, Download } from 'lucide-react';
-import { clientsApi, sitesApi, pdfApi } from '../api';
+import { Plus, Edit2, Trash2, MapPin, Mail, Phone, Search, Download, FileBarChart } from 'lucide-react';
+import { clientsApi, sitesApi, pdfApi, reportApi } from '../api';
 import Modal from '../components/Modal';
 import Confirm from '../components/Confirm';
 import { ToastProvider, useToast } from '../components/Toast';
@@ -181,8 +181,12 @@ function ClientsInner() {
                   <td className="py-3 px-3">
                     <div className="flex items-center justify-end gap-1">
                       <button onClick={() => pdfApi.clientPlanning(client.id, { start_date: monthStart, end_date: monthEnd })}
-                        className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-600/10 rounded-lg transition-colors" title="Export planning">
+                        className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-600/10 rounded-lg transition-colors" title="Planning PDF">
                         <Download className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => reportApi.monthly(client.id, new Date().toISOString().slice(0,7))}
+                        className="p-1.5 text-slate-400 hover:text-violet-400 hover:bg-violet-600/10 rounded-lg transition-colors" title="Rapport mensuel PDF">
+                        <FileBarChart className="w-3.5 h-3.5" />
                       </button>
                       <button onClick={() => setModal({ client })}
                         className="p-1.5 text-slate-400 hover:text-white hover:bg-dark-600 rounded-lg transition-colors">

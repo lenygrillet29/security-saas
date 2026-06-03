@@ -95,4 +95,97 @@ router.get('/quote/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── Rapport mensuel client ────────────────────────────────────────────────────
+// GET /api/pdf/report/monthly/:clientId?month=2026-06
+router.get('/report/monthly/:clientId', async (req, res) => {
+  try {
+    const { month } = req.query; // format YYYY-MM
+    const yearMonth = month || new Date().toISOString().slice(0, 7);
+    const [year, mon] = yearMonth.split('-');
+    const startDate = `${yearMonth}-01`;
+    const endDate   = new Date(year, mon, 0).toISOString().split('T')[0]; // dernier jour du mois
+
+    const client = await db.get('SELECT * FROM clients WHERE id = ? AND company_id = ?', [req.params.clientId, req.user.companyId]);
+    if (!client) return res.status(404).json({ error: 'Client non trouvé' });
+
+    const shifts = await db.all(`
+      SELECT sh.*,
+             s.name AS site_name, s.address AS site_address,
+             a.first_name AS agent_first, a.last_name AS agent_last
+      FROM shifts sh
+      JOIN sites  s ON sh.site_id  = s.id
+      JOIN agents a ON sh.agent_id = a.id
+      WHERE s.client_id = ? AND sh.company_id = ?
+        AND sh.date >= ? AND sh.date <= ?
+      ORDER BY sh.date, s.name, sh.start_time
+    `, [req.params.clientId, req.user.companyId, startDate, endDate]);
+
+    const settings = await getSettings(req.user.companyId);
+    const PDFDocument = require('pdfkit');
+    const doc = new PDFDocument({ margin: 40, size: 'A4', info: { Creator: 'SecuroPlan' } });
+
+    // En-tête
+    doc.rect(0, 0, doc.page.width, 70).fill('#1A1D2E');
+    doc.fillColor('#3B82F6').fontSize(18).font('Helvetica-Bold')
+       .text(settings.company_name || 'SecuroPlan', 40, 18);
+    doc.fillColor('#F1F5F9').fontSize(13).font('Helvetica-Bold')
+       .text('RAPPORT MENSUEL', 0, 18, { align: 'right', width: doc.page.width - 40 });
+    doc.fillColor('#94A3B8').fontSize(9).font('Helvetica')
+       .text(`${new Date(startDate).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}`, 0, 38, { align: 'right', width: doc.page.width - 40 });
+
+    let y = 90;
+    // Infos client
+    doc.fillColor('#94A3B8').fontSize(8).text('CLIENT', 40, y);
+    doc.fillColor('#F1F5F9').fontSize(12).font('Helvetica-Bold').text(client.name, 40, y + 12);
+    if (client.address) doc.fillColor('#94A3B8').fontSize(9).font('Helvetica').text(client.address, 40, y + 26);
+    y += 55;
+
+    // Résumé
+    const totalDay    = shifts.reduce((s, sh) => s + (parseFloat(sh.hours_day)    || 0), 0);
+    const totalNight  = shifts.reduce((s, sh) => s + (parseFloat(sh.hours_night)  || 0), 0);
+    const totalSunday = shifts.reduce((s, sh) => s + (parseFloat(sh.hours_sunday) || 0), 0);
+    const totalHours  = totalDay + totalNight + totalSunday;
+
+    doc.rect(40, y, doc.page.width - 80, 44).fill('#2D3555');
+    doc.fillColor('#94A3B8').fontSize(8).text('TOTAL HEURES', 60, y + 8);
+    doc.fillColor('#F1F5F9').fontSize(14).font('Helvetica-Bold').text(`${totalHours.toFixed(1)}h`, 60, y + 18);
+    doc.fillColor('#94A3B8').fontSize(8).text(`Jour: ${totalDay.toFixed(1)}h  Nuit: ${totalNight.toFixed(1)}h  Dimanche: ${totalSunday.toFixed(1)}h`, 60, y + 32);
+    doc.fillColor('#94A3B8').fontSize(8).text('PRESTATIONS', doc.page.width / 2, y + 8);
+    doc.fillColor('#F1F5F9').fontSize(14).font('Helvetica-Bold').text(`${shifts.length}`, doc.page.width / 2, y + 18);
+    y += 60;
+
+    // Tableau des prestations
+    doc.fillColor('#94A3B8').fontSize(8).font('Helvetica').text('DATE', 40, y);
+    doc.text('AGENT', 110, y);
+    doc.text('SITE', 230, y);
+    doc.text('HORAIRES', 360, y);
+    doc.text('HEURES', 460, y, { width: 80, align: 'right' });
+    y += 14;
+    doc.rect(40, y, doc.page.width - 80, 1).fill('#2D3555');
+    y += 6;
+
+    for (const sh of shifts) {
+      if (y > doc.page.height - 80) { doc.addPage(); y = 40; }
+      const total = (parseFloat(sh.hours_day)||0) + (parseFloat(sh.hours_night)||0) + (parseFloat(sh.hours_sunday)||0);
+      doc.fillColor('#F1F5F9').fontSize(9).font('Helvetica')
+         .text(new Date(sh.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }), 40, y)
+         .text(`${sh.agent_first} ${sh.agent_last}`, 110, y)
+         .text(sh.site_name, 230, y, { width: 120, ellipsis: true })
+         .text(`${sh.start_time}–${sh.end_time}`, 360, y)
+         .text(`${total.toFixed(1)}h`, 460, y, { width: 80, align: 'right' });
+      y += 16;
+      doc.rect(40, y, doc.page.width - 80, 0.5).fill('#1e2535');
+      y += 4;
+    }
+
+    // Pied de page
+    const pageCount = doc.bufferedPageRange?.()?.count || 1;
+    doc.fillColor('#475569').fontSize(8)
+       .text(`SecuroPlan — Rapport généré le ${new Date().toLocaleDateString('fr-FR')}`, 40, doc.page.height - 40, { align: 'center', width: doc.page.width - 80 });
+
+    const monthLabel = new Date(startDate).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }).replace(' ', '_');
+    streamPdf(res, doc, `rapport_${client.name}_${monthLabel}.pdf`);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

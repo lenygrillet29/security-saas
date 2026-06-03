@@ -227,6 +227,23 @@ async function init() {
     ALTER TABLE shifts ADD COLUMN IF NOT EXISTS checkin_distance INTEGER;
   `);
 
+  // ── Journal d'audit ───────────────────────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id          SERIAL PRIMARY KEY,
+      company_id  INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      user_id     INTEGER,
+      user_name   TEXT,
+      action      TEXT NOT NULL,
+      entity_type TEXT,
+      entity_id   INTEGER,
+      entity_name TEXT,
+      details     TEXT,
+      ip          TEXT,
+      created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   // ── Facturation ───────────────────────────────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS invoices (

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Save, Settings as SettingsIcon, Mail, Building2, Sun, Moon } from 'lucide-react';
-import { settingsApi } from '../api';
+import { Save, Settings as SettingsIcon, Mail, Building2, Sun, Moon, Download } from 'lucide-react';
+import { settingsApi, exportApi } from '../api';
 import { ToastProvider, useToast } from '../components/Toast';
 
 function Section({ title, icon: Icon, children }) {
@@ -141,6 +141,42 @@ function SettingsInner() {
           </button>
         </div>
       </form>
+
+      {/* Export comptable */}
+      <div className="bg-dark-800 border border-dark-600 rounded-xl p-5 mt-6">
+        <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+          <Download className="w-4 h-4 text-blue-400" /> Export comptable & paie
+        </h2>
+        <ExportSection />
+      </div>
+    </div>
+  );
+}
+
+function ExportSection() {
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const [month, setMonth] = useState(thisMonth);
+  const start = `${month}-01`;
+  const end   = new Date(month.slice(0,4), month.slice(5,7), 0).toISOString().split('T')[0];
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-3">
+        <div>
+          <label className="label">Mois</label>
+          <input type="month" className="input" value={month} onChange={e => setMonth(e.target.value)} />
+        </div>
+      </div>
+      <div className="flex gap-3 flex-wrap">
+        <button onClick={() => exportApi.shifts(start, end)}
+          className="btn-secondary flex items-center gap-2 text-sm">
+          <Download className="w-4 h-4" /> Prestations CSV
+        </button>
+        <button onClick={() => exportApi.invoices(start, end)}
+          className="btn-secondary flex items-center gap-2 text-sm">
+          <Download className="w-4 h-4" /> Factures CSV
+        </button>
+      </div>
+      <p className="text-xs text-slate-500">Les fichiers CSV s'ouvrent directement dans Excel (encodage UTF-8 BOM).</p>
     </div>
   );
 }
