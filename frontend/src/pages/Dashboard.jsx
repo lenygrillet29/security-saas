@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react';
-import { Users, Building2, MapPin, Calendar, TrendingUp, Moon, Sun, Clock } from 'lucide-react';
+import { Users, Building2, MapPin, Clock, TrendingUp, Euro, BarChart3, Star } from 'lucide-react';
 import { agentsApi, clientsApi, sitesApi, shiftsApi } from '../api';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
+const BASE = import.meta.env.VITE_API_URL || '/api';
+
 function StatCard({ icon: Icon, label, value, sub, color = 'blue' }) {
   const colors = {
-    blue: 'bg-blue-600/20 text-blue-400',
+    blue:    'bg-blue-600/20 text-blue-400',
     emerald: 'bg-emerald-600/20 text-emerald-400',
-    violet: 'bg-violet-600/20 text-violet-400',
-    amber: 'bg-amber-600/20 text-amber-400',
+    violet:  'bg-violet-600/20 text-violet-400',
+    amber:   'bg-amber-600/20 text-amber-400',
+    rose:    'bg-rose-600/20 text-rose-400',
   };
   return (
     <div className="stat-card">
@@ -25,31 +28,42 @@ function StatCard({ icon: Icon, label, value, sub, color = 'blue' }) {
   );
 }
 
+function RevenueBar({ months }) {
+  if (!months.length) return <p className="text-slate-500 text-sm py-8 text-center">Aucune donnée</p>;
+  const max = Math.max(...months.map(m => parseFloat(m.revenue) || 0), 1);
+  return (
+    <div className="flex items-end gap-2 h-32">
+      {months.map(m => {
+        const h = Math.max(((parseFloat(m.revenue) || 0) / max) * 100, 4);
+        const label = m.month ? m.month.slice(5) + '/' + m.month.slice(2, 4) : '';
+        return (
+          <div key={m.month} className="flex-1 flex flex-col items-center gap-1">
+            <div className="text-xs text-slate-500 font-medium">
+              {m.revenue > 0 ? `${(parseFloat(m.revenue)/1000).toFixed(1)}k` : ''}
+            </div>
+            <div
+              className="w-full rounded-t-md bg-blue-500/70 hover:bg-blue-500 transition-colors cursor-default"
+              style={{ height: `${h}%` }}
+              title={`${m.revenue} € — ${m.hours}h`}
+            />
+            <div className="text-xs text-slate-500">{label}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function HoursBar({ label, day, night, sunday }) {
-  const total = day + night + sunday;
+  const total = (parseFloat(day) || 0) + (parseFloat(night) || 0) + (parseFloat(sunday) || 0);
   if (total === 0) return null;
   return (
     <div className="flex items-center gap-3 py-2 border-b border-dark-600 last:border-0">
       <div className="w-28 text-sm text-slate-300 truncate">{label}</div>
       <div className="flex-1 flex rounded overflow-hidden h-4 bg-dark-700">
-        {day > 0 && (
-          <div className="bg-blue-500 h-full flex items-center justify-center text-xs text-white font-medium"
-            style={{ width: `${(day / total) * 100}%` }}>
-            {day > 2 ? `${day.toFixed(1)}h` : ''}
-          </div>
-        )}
-        {night > 0 && (
-          <div className="bg-violet-500 h-full flex items-center justify-center text-xs text-white font-medium"
-            style={{ width: `${(night / total) * 100}%` }}>
-            {night > 2 ? `${night.toFixed(1)}h` : ''}
-          </div>
-        )}
-        {sunday > 0 && (
-          <div className="bg-amber-500 h-full flex items-center justify-center text-xs text-white font-medium"
-            style={{ width: `${(sunday / total) * 100}%` }}>
-            {sunday > 2 ? `${sunday.toFixed(1)}h` : ''}
-          </div>
-        )}
+        {day > 0 && <div className="bg-blue-500 h-full" style={{ width: `${(day/total)*100}%` }} />}
+        {night > 0 && <div className="bg-violet-500 h-full" style={{ width: `${(night/total)*100}%` }} />}
+        {sunday > 0 && <div className="bg-amber-500 h-full" style={{ width: `${(sunday/total)*100}%` }} />}
       </div>
       <div className="text-sm text-slate-300 font-medium w-12 text-right">{total.toFixed(1)}h</div>
     </div>
@@ -57,61 +71,115 @@ function HoursBar({ label, day, night, sunday }) {
 }
 
 export default function Dashboard() {
-  const [agents, setAgents] = useState([]);
-  const [clients, setClients] = useState([]);
-  const [sites, setSites] = useState([]);
-  const [weekStats, setWeekStats] = useState([]);
-  const [monthStats, setMonthStats] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [agents, setAgents]           = useState([]);
+  const [clients, setClients]         = useState([]);
+  const [sites, setSites]             = useState([]);
+  const [weekStats, setWeekStats]     = useState([]);
+  const [monthStats, setMonthStats]   = useState([]);
+  const [revenue, setRevenue]         = useState([]);
+  const [topClients, setTopClients]   = useState([]);
+  const [loading, setLoading]         = useState(true);
 
-  const today = new Date();
-  const weekStart = format(startOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd');
-  const weekEnd = format(endOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd');
+  const today      = new Date();
+  const weekStart  = format(startOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd');
+  const weekEnd    = format(endOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd');
   const monthStart = format(startOfMonth(today), 'yyyy-MM-dd');
-  const monthEnd = format(endOfMonth(today), 'yyyy-MM-dd');
+  const monthEnd   = format(endOfMonth(today), 'yyyy-MM-dd');
 
   useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    const h = { Authorization: `Bearer ${token}` };
     Promise.all([
       agentsApi.list(true),
       clientsApi.list(),
       sitesApi.list(),
-      shiftsApi.stats({ start_date: weekStart, end_date: weekEnd }),
+      shiftsApi.stats({ start_date: weekStart,  end_date: weekEnd }),
       shiftsApi.stats({ start_date: monthStart, end_date: monthEnd }),
-    ]).then(([a, c, s, ws, ms]) => {
-      setAgents(a);
-      setClients(c);
-      setSites(s);
-      setWeekStats(ws);
-      setMonthStats(ms);
+      fetch(`${BASE}/shifts/stats/revenue`, { headers: h }).then(r => r.json()),
+      fetch(`${BASE}/shifts/stats/clients?start_date=${monthStart}&end_date=${monthEnd}`, { headers: h }).then(r => r.json()),
+    ]).then(([a, c, s, ws, ms, rev, tc]) => {
+      setAgents(a); setClients(c); setSites(s);
+      setWeekStats(ws); setMonthStats(ms);
+      setRevenue(Array.isArray(rev) ? rev : []);
+      setTopClients(Array.isArray(tc) ? tc : []);
     }).finally(() => setLoading(false));
   }, []);
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
-      <div className="text-slate-400">Chargement...</div>
+      <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
     </div>
   );
 
-  const totalWeekHours = weekStats.reduce((s, r) => s + r.total_day + r.total_night + r.total_sunday, 0);
-  const totalMonthHours = monthStats.reduce((s, r) => s + r.total_day + r.total_night + r.total_sunday, 0);
+  const totalWeekHours  = weekStats.reduce((s, r)  => s + (parseFloat(r.total_day)||0) + (parseFloat(r.total_night)||0) + (parseFloat(r.total_sunday)||0), 0);
+  const totalMonthHours = monthStats.reduce((s, r) => s + (parseFloat(r.total_day)||0) + (parseFloat(r.total_night)||0) + (parseFloat(r.total_sunday)||0), 0);
+  const currentMonthRev = revenue.length ? parseFloat(revenue[revenue.length - 1]?.revenue) || 0 : 0;
+  const prevMonthRev    = revenue.length > 1 ? parseFloat(revenue[revenue.length - 2]?.revenue) || 0 : 0;
+  const revTrend        = prevMonthRev > 0 ? Math.round(((currentMonthRev - prevMonthRev) / prevMonthRev) * 100) : null;
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="page-header">
         <div>
           <h1 className="page-title">Tableau de bord</h1>
-          <p className="text-slate-400 text-sm mt-1">
-            {format(today, "EEEE d MMMM yyyy", { locale: fr })}
-          </p>
+          <p className="text-slate-400 text-sm mt-1">{format(today, "EEEE d MMMM yyyy", { locale: fr })}</p>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={Users} label="Agents actifs" value={agents.length} color="blue" />
-        <StatCard icon={Building2} label="Clients" value={clients.filter(c => c.active).length} color="emerald" />
-        <StatCard icon={MapPin} label="Sites actifs" value={sites.filter(s => s.active).length} color="violet" />
-        <StatCard icon={Clock} label="Heures ce mois" value={`${totalMonthHours.toFixed(0)}h`} color="amber" />
+      {/* KPIs */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <StatCard icon={Users}      label="Agents actifs"   value={agents.length}                       color="blue" />
+        <StatCard icon={Building2}  label="Clients"         value={clients.filter(c => c.active).length} color="emerald" />
+        <StatCard icon={MapPin}     label="Sites actifs"    value={sites.filter(s => s.active).length}   color="violet" />
+        <StatCard icon={Clock}      label="Heures ce mois"  value={`${totalMonthHours.toFixed(0)}h`}     color="amber" />
+        <StatCard
+          icon={Euro}
+          label="CA ce mois (estimé)"
+          value={`${currentMonthRev.toLocaleString('fr-FR', { minimumFractionDigits: 0 })} €`}
+          sub={revTrend !== null ? `${revTrend >= 0 ? '+' : ''}${revTrend}% vs mois dernier` : undefined}
+          color="rose"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* CA 6 derniers mois */}
+        <div className="card p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold text-white flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-blue-400" /> CA mensuel (6 mois)
+            </h2>
+            <span className="text-xs text-slate-500">Basé sur les taux horaires des sites</span>
+          </div>
+          <RevenueBar months={revenue} />
+        </div>
+
+        {/* Top clients du mois */}
+        <div className="card p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold text-white flex items-center gap-2">
+              <Star className="w-4 h-4 text-amber-400" /> Top clients ce mois
+            </h2>
+            <span className="text-xs text-slate-500">{format(today, 'MMMM yyyy', { locale: fr })}</span>
+          </div>
+          {topClients.length === 0 ? (
+            <p className="text-slate-500 text-sm py-8 text-center">Aucune prestation ce mois</p>
+          ) : (
+            <div className="space-y-2">
+              {topClients.slice(0, 6).map((c, i) => (
+                <div key={c.id} className="flex items-center gap-3 py-1.5">
+                  <span className="text-xs font-bold text-slate-500 w-5 text-right">{i + 1}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-white truncate">{c.name}</div>
+                    <div className="text-xs text-slate-500">{c.hours}h · {c.shift_count} prestation{c.shift_count > 1 ? 's' : ''}</div>
+                  </div>
+                  <span className="text-sm font-semibold text-emerald-400 shrink-0">
+                    {parseFloat(c.revenue).toLocaleString('fr-FR', { minimumFractionDigits: 0 })} €
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -121,7 +189,7 @@ export default function Dashboard() {
             <h2 className="font-semibold text-white">Heures semaine en cours</h2>
             <span className="text-xs text-slate-500">{weekStart} → {weekEnd}</span>
           </div>
-          <div className="flex gap-4 mb-4 text-xs">
+          <div className="flex gap-4 mb-4 text-xs text-slate-400">
             <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block"/>Jour</span>
             <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-violet-500 inline-block"/>Nuit</span>
             <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-500 inline-block"/>Dimanche</span>
@@ -129,21 +197,13 @@ export default function Dashboard() {
           {weekStats.length === 0 ? (
             <p className="text-slate-500 text-sm py-4 text-center">Aucun shift cette semaine</p>
           ) : (
-            <div>
-              {weekStats.map(s => (
-                <HoursBar
-                  key={s.agent_id}
-                  label={`${s.first_name} ${s.last_name}`}
-                  day={s.total_day}
-                  night={s.total_night}
-                  sunday={s.total_sunday}
-                />
-              ))}
+            <>
+              {weekStats.map(s => <HoursBar key={s.agent_id} label={`${s.first_name} ${s.last_name}`} day={s.total_day} night={s.total_night} sunday={s.total_sunday} />)}
               <div className="mt-3 pt-3 border-t border-dark-500 flex justify-between text-sm">
                 <span className="text-slate-400">Total semaine</span>
                 <span className="font-semibold text-white">{totalWeekHours.toFixed(1)}h</span>
               </div>
-            </div>
+            </>
           )}
         </div>
 
@@ -153,7 +213,7 @@ export default function Dashboard() {
             <h2 className="font-semibold text-white">Heures mois en cours</h2>
             <span className="text-xs text-slate-500">{format(today, 'MMMM yyyy', { locale: fr })}</span>
           </div>
-          <div className="flex gap-4 mb-4 text-xs">
+          <div className="flex gap-4 mb-4 text-xs text-slate-400">
             <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block"/>Jour</span>
             <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-violet-500 inline-block"/>Nuit</span>
             <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-500 inline-block"/>Dimanche</span>
@@ -161,21 +221,13 @@ export default function Dashboard() {
           {monthStats.length === 0 ? (
             <p className="text-slate-500 text-sm py-4 text-center">Aucun shift ce mois</p>
           ) : (
-            <div>
-              {monthStats.slice(0, 8).map(s => (
-                <HoursBar
-                  key={s.agent_id}
-                  label={`${s.first_name} ${s.last_name}`}
-                  day={s.total_day}
-                  night={s.total_night}
-                  sunday={s.total_sunday}
-                />
-              ))}
+            <>
+              {monthStats.slice(0, 8).map(s => <HoursBar key={s.agent_id} label={`${s.first_name} ${s.last_name}`} day={s.total_day} night={s.total_night} sunday={s.total_sunday} />)}
               <div className="mt-3 pt-3 border-t border-dark-500 flex justify-between text-sm">
                 <span className="text-slate-400">Total mois</span>
                 <span className="font-semibold text-white">{totalMonthHours.toFixed(1)}h</span>
               </div>
-            </div>
+            </>
           )}
         </div>
       </div>

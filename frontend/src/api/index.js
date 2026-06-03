@@ -170,6 +170,16 @@ export const contractsApi = {
   signByToken: (token) => fetch(`${BASE}/contracts/sign/${token}`, { method: 'POST' }).then(r => r.json()),
 };
 
+// Invoices
+export const invoicesApi = {
+  list: (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/invoices${q ? `?${q}` : ''}`); },
+  get: (id) => get(`/invoices/${id}`),
+  create: (data) => post('/invoices', data),
+  update: (id, data) => put(`/invoices/${id}`, data),
+  delete: (id) => del(`/invoices/${id}`),
+  fromQuote: (quoteId) => post(`/invoices/from-quote/${quoteId}`, {}),
+};
+
 // Shifts check-in/check-out
 export const checkinApi = {
   checkin: (shiftId, coords) => post(`/shifts/${shiftId}/checkin`, coords),

@@ -98,6 +98,7 @@ app.use('/api/email',    require('./routes/email'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/billing',   require('./routes/billing'));   // /subscription, /cancel, /reactivate
 app.use('/api/contracts', require('./routes/contracts')); // CRUD + envoi + signature
+app.use('/api/invoices',  require('./routes/invoices'));  // Facturation
 
 // ─── Gestionnaire d'erreurs ───────────────────────────────────────────────────
 app.use((err, req, res, next) => {

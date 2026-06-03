@@ -227,6 +227,35 @@ async function init() {
     ALTER TABLE shifts ADD COLUMN IF NOT EXISTS checkin_distance INTEGER;
   `);
 
+  // ── Facturation ───────────────────────────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS invoices (
+      id             SERIAL PRIMARY KEY,
+      company_id     INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      client_id      INTEGER NOT NULL REFERENCES clients(id) ON DELETE RESTRICT,
+      quote_id       INTEGER REFERENCES quotes(id) ON DELETE SET NULL,
+      invoice_number TEXT,
+      title          TEXT NOT NULL,
+      issue_date     TEXT NOT NULL,
+      due_date       TEXT,
+      status         TEXT DEFAULT 'draft',
+      payment_date   TEXT,
+      notes          TEXT,
+      total_ht       REAL DEFAULT 0,
+      tva_rate       REAL DEFAULT 20,
+      created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS invoice_lines (
+      id          SERIAL PRIMARY KEY,
+      invoice_id  INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+      description TEXT NOT NULL,
+      quantity    REAL DEFAULT 1,
+      unit_price  REAL DEFAULT 0,
+      total       REAL DEFAULT 0
+    );
+  `);
+
   // ── Contrats de travail ────────────────────────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS contracts (

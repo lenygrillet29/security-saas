@@ -15,6 +15,56 @@ const SHIFTS_QUERY = `
   JOIN clients c ON s.client_id = c.id
 `;
 
+// /stats/revenue — CA mensuel sur les 6 derniers mois
+router.get('/stats/revenue', async (req, res) => {
+  try {
+    const rows = await db.all(`
+      SELECT
+        TO_CHAR(DATE_TRUNC('month', sh.date::date), 'YYYY-MM') AS month,
+        ROUND(SUM(
+          sh.hours_day    * COALESCE(s.hourly_rate_day,    0) +
+          sh.hours_night  * COALESCE(s.hourly_rate_night,  0) +
+          sh.hours_sunday * COALESCE(s.hourly_rate_sunday, 0)
+        )::numeric, 2) AS revenue,
+        ROUND(SUM(sh.hours_day + sh.hours_night + sh.hours_sunday)::numeric, 1) AS hours
+      FROM shifts sh
+      JOIN sites s ON sh.site_id = s.id
+      WHERE sh.company_id = ?
+        AND sh.date >= TO_CHAR(NOW() - INTERVAL '5 months', 'YYYY-MM-01')
+      GROUP BY month
+      ORDER BY month
+    `, [req.user.companyId]);
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// /stats/clients — top clients par CA ce mois
+router.get('/stats/clients', async (req, res) => {
+  try {
+    const { start_date, end_date } = req.query;
+    const rows = await db.all(`
+      SELECT
+        c.id, c.name,
+        ROUND(SUM(
+          sh.hours_day    * COALESCE(s.hourly_rate_day,    0) +
+          sh.hours_night  * COALESCE(s.hourly_rate_night,  0) +
+          sh.hours_sunday * COALESCE(s.hourly_rate_sunday, 0)
+        )::numeric, 2) AS revenue,
+        ROUND(SUM(sh.hours_day + sh.hours_night + sh.hours_sunday)::numeric, 1) AS hours,
+        COUNT(DISTINCT sh.id) AS shift_count
+      FROM shifts sh
+      JOIN sites  s ON sh.site_id  = s.id
+      JOIN clients c ON s.client_id = c.id
+      WHERE sh.company_id = ?
+        AND sh.date >= ? AND sh.date <= ?
+      GROUP BY c.id, c.name
+      ORDER BY revenue DESC
+      LIMIT 10
+    `, [req.user.companyId, start_date || '2000-01-01', end_date || '2099-12-31']);
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // /stats/summary AVANT /:id
 router.get('/stats/summary', async (req, res) => {
   try {
