@@ -58,7 +58,7 @@ export default function SignContract() {
             <Shield className="w-5 h-5 text-white" />
           </div>
           <div>
-            <div className="text-xl font-bold text-white">SecuritySaaS</div>
+            <div className="text-xl font-bold text-white">SecuroPlan</div>
             <div className="text-xs text-slate-500">Gestion Sécurité Privée</div>
           </div>
         </div>
@@ -160,7 +160,7 @@ export default function SignContract() {
         </div>
 
         <p className="text-center text-xs text-slate-600 mt-6">
-          Propulsé par SecuritySaaS — Gestion Sécurité Privée
+          Propulsé par SecuroPlan — Gestion Sécurité Privée
         </p>
       </div>
     </div>

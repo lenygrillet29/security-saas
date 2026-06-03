@@ -112,7 +112,7 @@ router.post('/newsletter', masterKeyAuth, async (req, res) => {
     for (const admin of admins) {
       await sendSystemEmail({
         to: admin.email,
-        subject: '🚀 Nouveautés SecuritySaaS',
+        subject: '🚀 Nouveautés SecuroPlan',
         html: templates.newFeature({ features, ctaUrl }),
       });
       sent++;

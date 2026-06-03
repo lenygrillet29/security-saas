@@ -17,7 +17,7 @@ function createDoc() {
   const doc = new PDFDocument({
     margin: 40,
     size: 'A4',
-    info: { Creator: 'SecuritySaaS', Producer: 'SecuritySaaS' },
+    info: { Creator: 'SecuroPlan', Producer: 'SecuroPlan' },
   });
   return doc;
 }

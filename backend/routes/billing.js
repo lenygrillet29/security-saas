@@ -112,7 +112,7 @@ router.post('/cancel', requireAuth, requireRole('admin'), async (req, res) => {
     if (admin) {
       sendSystemEmail({
         to: admin.email,
-        subject: 'Résiliation confirmée — SecuritySaaS',
+        subject: 'Résiliation confirmée — SecuroPlan',
         html: templates.cancellationConfirmed({
           firstName:   admin.first_name,
           companyName: admin.name,
@@ -270,7 +270,7 @@ async function webhookHandler(req, res) {
           if (rows[0]) {
             sendSystemEmail({
               to: rows[0].email,
-              subject: '⚠️ Échec de paiement — SecuritySaaS',
+              subject: '⚠️ Échec de paiement — SecuroPlan',
               html: templates.paymentFailed({
                 firstName:   rows[0].first_name,
                 companyName: rows[0].name,

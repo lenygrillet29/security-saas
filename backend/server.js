@@ -112,7 +112,7 @@ app.use((err, req, res, next) => {
 init()
   .then(async () => {
     app.listen(PORT, () => {
-      console.log(`SecuritySaaS API running on port ${PORT} (PostgreSQL, multi-tenant)`);
+      console.log(`SecuroPlan API running on port ${PORT} (PostgreSQL, multi-tenant)`);
     });
 
     // ── Scheduler (cron jobs) ─────────────────────────────────────────────────

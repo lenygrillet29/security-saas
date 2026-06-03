@@ -1,4 +1,4 @@
-// Service Worker — SecuritySaaS PWA
+// Service Worker — SecuroPlan PWA
 const CACHE_NAME = 'securitysaas-v1';
 
 // Fichiers à mettre en cache pour le mode hors-ligne

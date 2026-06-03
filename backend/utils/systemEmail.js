@@ -19,7 +19,7 @@ async function sendSystemEmail({ to, subject, html }) {
     console.warn('[SystemEmail] SYSTEM_SMTP_HOST non configuré — ignoré:', subject, '→', to);
     return null;
   }
-  const fromName = process.env.SYSTEM_FROM_NAME || 'SecuritySaaS';
+  const fromName = process.env.SYSTEM_FROM_NAME || 'SecuroPlan';
   const fromEmail = process.env.SYSTEM_FROM_EMAIL || process.env.SYSTEM_SMTP_USER;
   try {
     const info = await transporter.sendMail({

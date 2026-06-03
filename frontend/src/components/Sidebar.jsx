@@ -46,7 +46,7 @@ export default function Sidebar() {
           </div>
           <div className="min-w-0">
             <div className="text-sm font-bold text-white leading-tight truncate">
-              {user?.company_name || 'SecuritySaaS'}
+              {user?.company_name || 'SecuroPlan'}
             </div>
             <div className="text-xs text-slate-500 truncate">Gestion Sécurité</div>
           </div>

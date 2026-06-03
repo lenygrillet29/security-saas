@@ -67,7 +67,7 @@ async function sendShiftSMSReminders() {
 
     for (const shift of shifts) {
       const lines = [
-        `🛡 SecuritySaaS — Rappel prestation demain`,
+        `🛡 SecuroPlan — Rappel prestation demain`,
         `📍 ${shift.site_name}`,
         `🕐 ${shift.start_time} – ${shift.end_time}`,
       ];

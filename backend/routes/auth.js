@@ -120,7 +120,7 @@ router.post('/register', async (req, res) => {
     const trialEndDate = new Date(Date.now() + 30 * 86400000).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
     sendSystemEmail({
       to: email.toLowerCase(),
-      subject: `Bienvenue sur SecuritySaaS, ${first_name} ! 🎉`,
+      subject: `Bienvenue sur SecuroPlan, ${first_name} ! 🎉`,
       html: templates.welcome({ companyName: company_name, firstName: first_name, trialEndDate }),
     }).catch(() => {});
 

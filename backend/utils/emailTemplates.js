@@ -20,7 +20,7 @@ function base(title, content) {
               <span style="color:white;font-size:18px;font-weight:bold;">🛡</span>
             </td>
             <td style="padding-left:12px;vertical-align:middle;text-align:left;">
-              <div style="color:white;font-size:18px;font-weight:700;line-height:1.2;">SecuritySaaS</div>
+              <div style="color:white;font-size:18px;font-weight:700;line-height:1.2;">SecuroPlan</div>
               <div style="color:#64748b;font-size:11px;">Gestion Sécurité Privée</div>
             </td>
           </tr>
@@ -32,9 +32,9 @@ function base(title, content) {
       </td></tr>
       <!-- Footer -->
       <tr><td style="padding-top:24px;text-align:center;color:#475569;font-size:11px;line-height:1.8;">
-        SecuritySaaS — Gestion Sécurité Privée<br>
+        SecuroPlan — Gestion Sécurité Privée<br>
         <a href="${APP_URL}" style="color:#3b82f6;text-decoration:none;">${APP_URL.replace('https://', '')}</a><br>
-        <span style="color:#334155;">Vous recevez cet email car vous êtes client SecuritySaaS.</span>
+        <span style="color:#334155;">Vous recevez cet email car vous êtes client SecuroPlan.</span>
       </td></tr>
     </table>
   </td></tr>
@@ -56,7 +56,7 @@ function row(label, value, valueColor = 'white') {
 
 // ─── Bienvenue ─────────────────────────────────────────────────────────────────
 function welcome({ companyName, firstName, trialEndDate }) {
-  return base('Bienvenue sur SecuritySaaS 🎉', `
+  return base('Bienvenue sur SecuroPlan 🎉', `
     <h1 style="color:white;font-size:24px;margin:0 0 6px;">Bienvenue, ${firstName} ! 👋</h1>
     <p style="color:#94a3b8;font-size:14px;margin:0 0 28px;line-height:1.6;">
       Votre compte <strong style="color:white;">${companyName}</strong> a été créé avec succès.
@@ -134,7 +134,7 @@ function paymentSucceeded({ firstName, companyName, amount, date, invoiceUrl }) 
           ${row('Entreprise', companyName)}
           ${row('Montant', `${amount} €`, '#10b981')}
           ${row('Date', date)}
-          ${row('Plan', 'SecuritySaaS Pro')}
+          ${row('Plan', 'SecuroPlan Pro')}
         </table>
       </td></tr>
     </table>
@@ -200,7 +200,7 @@ function newFeature({ features, ctaUrl }) {
     </td></tr>`
   ).join('');
 
-  return base('Nouveautés SecuritySaaS 🚀', `
+  return base('Nouveautés SecuroPlan 🚀', `
     <h1 style="color:white;font-size:24px;margin:0 0 8px;">Nouvelles fonctionnalités disponibles 🚀</h1>
     <p style="color:#94a3b8;font-size:14px;margin:0 0 28px;line-height:1.6;">
       Nous avons mis à jour votre logiciel avec de nouvelles fonctionnalités.

@@ -1,7 +1,7 @@
 const BASE = import.meta.env.VITE_API_URL || '/api';
 
 if (import.meta.env.PROD && !import.meta.env.VITE_API_URL) {
-  console.error('[SecuritySaaS] ⚠️  VITE_API_URL non définie au build.');
+  console.error('[SecuroPlan] ⚠️  VITE_API_URL non définie au build.');
 }
 
 export const API_BASE_URL = BASE;

@@ -1,6 +1,6 @@
 {
-  "name": "SecuritySaaS — Gestion Sécurité Privée",
-  "short_name": "SecuritySaaS",
+  "name": "SecuroPlan — Gestion Sécurité Privée",
+  "short_name": "SecuroPlan",
   "description": "Logiciel de gestion pour entreprises de sécurité privée",
   "start_url": "/dashboard",
   "display": "standalone",
