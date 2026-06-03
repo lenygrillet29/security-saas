@@ -282,4 +282,23 @@ function agentPortalLink({ agentFirstName, companyName, portalUrl }) {
   `);
 }
 
-module.exports = { welcome, trialEnding, paymentSucceeded, paymentFailed, cancellationConfirmed, newFeature, contractSignRequest, clientPortalLink, agentPortalLink };
+// ─── Réinitialisation mot de passe ────────────────────────────────────────────
+function passwordReset({ resetUrl }) {
+  return base('Réinitialisation de votre mot de passe', `
+    <h1 style="color:white;font-size:22px;margin:0 0 12px;">Mot de passe oublié ? 🔑</h1>
+    <p style="color:#94a3b8;font-size:14px;margin:0 0 28px;line-height:1.6;">
+      Vous avez demandé à réinitialiser votre mot de passe SecuroPlan.<br>
+      Cliquez sur le bouton ci-dessous pour choisir un nouveau mot de passe.<br>
+      <strong style="color:#64748b;">Ce lien expire dans 1 heure.</strong>
+    </p>
+
+    ${btn('Réinitialiser mon mot de passe →', resetUrl)}
+
+    <p style="color:#475569;font-size:12px;margin:20px 0 0;text-align:center;line-height:1.8;">
+      Si vous n'avez pas fait cette demande, ignorez cet email.<br>
+      Votre mot de passe ne sera pas modifié.
+    </p>
+  `);
+}
+
+module.exports = { welcome, trialEnding, paymentSucceeded, paymentFailed, cancellationConfirmed, newFeature, contractSignRequest, clientPortalLink, agentPortalLink, passwordReset };

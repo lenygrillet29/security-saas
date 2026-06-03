@@ -316,6 +316,18 @@ async function init() {
     ALTER TABLE agents ADD COLUMN IF NOT EXISTS agent_token TEXT UNIQUE;
   `);
 
+  // ── Réinitialisation mot de passe ─────────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id         SERIAL PRIMARY KEY,
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token      TEXT NOT NULL UNIQUE,
+      expires_at TIMESTAMP NOT NULL,
+      used       INTEGER DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   console.log('[DB] PostgreSQL connecté — schéma multi-tenant initialisé');
 }
 

@@ -64,7 +64,12 @@ export default function Login() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">Mot de passe</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-sm font-medium text-slate-300">Mot de passe</label>
+                <Link to="/forgot-password" className="text-xs text-blue-400 hover:text-blue-300">
+                  Mot de passe oublié ?
+                </Link>
+              </div>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}

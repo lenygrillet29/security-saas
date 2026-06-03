@@ -6,6 +6,7 @@ const { db } = require('../db/database');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { sendSystemEmail } = require('../utils/systemEmail');
 const templates = require('../utils/emailTemplates');
+const { randomUUID } = require('crypto');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-prod';
 const SALT_ROUNDS = 10;
@@ -304,6 +305,60 @@ router.delete('/users/:id', requireAuth, requireRole('admin'), async (req, res) 
     );
     if (!existing) return res.status(404).json({ error: 'Utilisateur non trouvé' });
     await db.run('DELETE FROM users WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Mot de passe oublié — demande ───────────────────────────────────────────
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email requis' });
+
+    const user = await db.get('SELECT id, email, first_name FROM users WHERE email = ? AND active = 1', [email.toLowerCase()]);
+
+    // Toujours répondre OK pour ne pas révéler si l'email existe
+    if (!user) return res.json({ success: true });
+
+    // Supprimer les anciens tokens
+    await db.run('DELETE FROM password_reset_tokens WHERE user_id = ?', [user.id]);
+
+    const token = randomUUID();
+    const expires = new Date(Date.now() + 3600000); // +1h
+    await db.insert(
+      'INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)',
+      [user.id, token, expires.toISOString()]
+    );
+
+    const appUrl = process.env.APP_URL || 'https://securoplan.vercel.app';
+    await sendSystemEmail({
+      to: user.email,
+      subject: 'Réinitialisation de votre mot de passe SecuroPlan',
+      html: templates.passwordReset({ resetUrl: `${appUrl}/reset-password/${token}` }),
+    });
+
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Mot de passe oublié — réinitialisation ───────────────────────────────────
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) return res.status(400).json({ error: 'Token et mot de passe requis' });
+    if (password.length < 8) return res.status(400).json({ error: 'Minimum 8 caractères' });
+
+    const record = await db.get(
+      'SELECT * FROM password_reset_tokens WHERE token = ? AND used = 0',
+      [token]
+    );
+    if (!record) return res.status(400).json({ error: 'Lien invalide ou déjà utilisé' });
+    if (new Date(record.expires_at) < new Date()) return res.status(400).json({ error: 'Lien expiré — refaites la demande' });
+
+    const hash = await bcrypt.hash(password, SALT_ROUNDS);
+    await db.run('UPDATE users SET password_hash = ? WHERE id = ?', [hash, record.user_id]);
+    await db.run('UPDATE password_reset_tokens SET used = 1 WHERE id = ?', [record.id]);
+
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

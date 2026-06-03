@@ -21,6 +21,8 @@ import Simulation from './pages/Simulation';
 import Chiffrage from './pages/Chiffrage';
 import ClientPortal from './pages/ClientPortal';
 import AgentPortal from './pages/AgentPortal';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -53,6 +55,9 @@ export default function App() {
             <Route path="/portal/:token" element={<ClientPortal />} />
             {/* Portail agent mobile (public, sans compte) */}
             <Route path="/agent/:token" element={<AgentPortal />} />
+            {/* Mot de passe oublié */}
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password/:token" element={<ResetPassword />} />
 
             {/* Application protégée */}
             <Route
