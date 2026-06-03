@@ -260,4 +260,26 @@ function clientPortalLink({ clientName, companyName, portalUrl }) {
   `);
 }
 
-module.exports = { welcome, trialEnding, paymentSucceeded, paymentFailed, cancellationConfirmed, newFeature, contractSignRequest, clientPortalLink };
+// ─── Accès agent mobile ────────────────────────────────────────────────────────
+function agentPortalLink({ agentFirstName, companyName, portalUrl }) {
+  return base(`Votre espace agent — ${companyName}`, `
+    <h1 style="color:white;font-size:22px;margin:0 0 12px;">Bienvenue ${agentFirstName} ! 👋</h1>
+    <p style="color:#94a3b8;font-size:14px;margin:0 0 12px;line-height:1.6;">
+      <strong style="color:white;">${companyName}</strong> vous a créé un espace personnel pour consulter
+      votre planning et pointer vos prises de service.
+    </p>
+    <p style="color:#94a3b8;font-size:14px;margin:0 0 28px;line-height:1.6;">
+      Cliquez sur le bouton ci-dessous depuis votre téléphone pour accéder à votre espace.
+      Vous pouvez l'installer sur votre écran d'accueil comme une application.
+    </p>
+
+    ${btn('Accéder à mon espace →', portalUrl, '#2563eb')}
+
+    <p style="color:#475569;font-size:12px;margin:20px 0 0;text-align:center;line-height:1.8;">
+      Ce lien est personnel — ne le partagez pas.<br>
+      En cas de problème, contactez votre responsable.
+    </p>
+  `);
+}
+
+module.exports = { welcome, trialEnding, paymentSucceeded, paymentFailed, cancellationConfirmed, newFeature, contractSignRequest, clientPortalLink, agentPortalLink };

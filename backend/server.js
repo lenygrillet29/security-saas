@@ -49,6 +49,9 @@ app.use('/api/contracts/sign', require('./routes/contracts'));
 // ─── Portail client public (token dans l'URL, pas de JWT) ────────────────────
 app.use('/api/portal', require('./routes/portal'));
 
+// ─── Portail agent mobile (token dans l'URL, pas de JWT) ─────────────────────
+app.use('/api/agent-portal', require('./routes/agent-portal'));
+
 // ─── Admin superadmin (protégé par ADMIN_MASTER_KEY, pas JWT) ────────────────
 app.use('/api/admin', require('./routes/admin'));
 

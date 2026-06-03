@@ -4,6 +4,9 @@ const { db } = require('../db/database');
 const { requireWriter } = require('../middleware/auth');
 const { logAudit } = require('../utils/audit');
 const { checkAgentLimit } = require('./addons');
+const { randomUUID } = require('crypto');
+const { sendSystemEmail } = require('../utils/systemEmail');
+const templates = require('../utils/emailTemplates');
 
 router.get('/', async (req, res) => {
   try {
@@ -77,14 +80,31 @@ router.post('/', requireWriter, async (req, res) => {
         pack:  limitCheck.pack,
       });
     }
+    const agentToken = randomUUID();
     const result = await db.insert(
-      `INSERT INTO agents (company_id, first_name, last_name, email, phone, employee_number, contract_type, hourly_rate, color, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO agents (company_id, first_name, last_name, email, phone, employee_number, contract_type, hourly_rate, color, notes, agent_token)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [req.user.companyId, first_name, last_name, email || null, phone || null,
-        employee_number || null, contract_type || 'CDI', hourly_rate || 0, color || '#3B82F6', notes || null]
+        employee_number || null, contract_type || 'CDI', hourly_rate || 0, color || '#3B82F6', notes || null, agentToken]
     );
     const agent = await db.get('SELECT * FROM agents WHERE id = ?', [result.lastInsertRowid]);
     logAudit(req, { action: 'CREATE', entityType: 'agent', entityId: agent.id, entityName: `${first_name} ${last_name}` });
+
+    // Envoi email avec lien portail agent
+    if (email) {
+      const appUrl = process.env.APP_URL || 'https://securoplan.vercel.app';
+      const company = await db.get('SELECT name FROM companies WHERE id = ?', [req.user.companyId]);
+      sendSystemEmail({
+        to: email,
+        subject: `Votre espace agent — ${company?.name || 'SecuroPlan'}`,
+        html: templates.agentPortalLink({
+          agentFirstName: first_name,
+          companyName:    company?.name || 'SecuroPlan',
+          portalUrl:      `${appUrl}/agent/${agentToken}`,
+        }),
+      }).catch(() => {});
+    }
+
     res.status(201).json(agent);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

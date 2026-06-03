@@ -20,6 +20,7 @@ import AuditLog from './pages/AuditLog';
 import Simulation from './pages/Simulation';
 import Chiffrage from './pages/Chiffrage';
 import ClientPortal from './pages/ClientPortal';
+import AgentPortal from './pages/AgentPortal';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -50,6 +51,8 @@ export default function App() {
             <Route path="/sign-contract/:token" element={<SignContract />} />
             {/* Portail client (public, sans compte) */}
             <Route path="/portal/:token" element={<ClientPortal />} />
+            {/* Portail agent mobile (public, sans compte) */}
+            <Route path="/agent/:token" element={<AgentPortal />} />
 
             {/* Application protégée */}
             <Route

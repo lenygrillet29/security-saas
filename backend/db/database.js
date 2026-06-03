@@ -311,6 +311,11 @@ async function init() {
     ALTER TABLE clients ADD COLUMN IF NOT EXISTS portal_token TEXT UNIQUE;
   `);
 
+  // ── Portail agent mobile (lien unique envoyé par email à la création) ─────────
+  await pool.query(`
+    ALTER TABLE agents ADD COLUMN IF NOT EXISTS agent_token TEXT UNIQUE;
+  `);
+
   console.log('[DB] PostgreSQL connecté — schéma multi-tenant initialisé');
 }
 
