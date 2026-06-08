@@ -5,9 +5,19 @@
  * POST /api/agent-portal/:token/checkin/:shiftId  → pointer arrivée (géoloc)
  * POST /api/agent-portal/:token/checkout/:shiftId → pointer départ (géoloc)
  */
-const express = require('express');
-const router  = express.Router();
-const { db }  = require('../db/database');
+const express  = require('express');
+const router   = express.Router();
+const { db }   = require('../db/database');
+const webpush  = require('web-push');
+
+// Config VAPID (si clés présentes)
+if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails(
+    'mailto:contact@securoplan.fr',
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+  );
+}
 
 // ── Résoudre l'agent depuis le token ─────────────────────────────────────────
 async function resolveAgent(token) {
@@ -115,4 +125,91 @@ router.post('/:token/checkout/:shiftId', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── POST /api/agent-portal/:token/subscribe ───────────────────────────────────
+router.post('/:token/subscribe', async (req, res) => {
+  try {
+    const agent = await resolveAgent(req.params.token);
+    if (!agent) return res.status(404).json({ error: 'Lien invalide' });
+
+    const { endpoint, keys } = req.body;
+    if (!endpoint || !keys?.p256dh || !keys?.auth) {
+      return res.status(400).json({ error: 'Subscription invalide' });
+    }
+
+    await db.run(
+      `INSERT INTO agent_push_subscriptions (agent_id, endpoint, p256dh, auth)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT (agent_id, endpoint) DO UPDATE SET p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth`,
+      [agent.id, endpoint, keys.p256dh, keys.auth]
+    );
+
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/agent-portal/:token/unsubscribe ─────────────────────────────────
+router.post('/:token/unsubscribe', async (req, res) => {
+  try {
+    const agent = await resolveAgent(req.params.token);
+    if (!agent) return res.status(404).json({ error: 'Lien invalide' });
+    await db.run('DELETE FROM agent_push_subscriptions WHERE agent_id = ?', [agent.id]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Clé publique VAPID (pour le frontend) ────────────────────────────────────
+router.get('/vapid-public-key', (req, res) => {
+  res.json({ key: process.env.VAPID_PUBLIC_KEY || null });
+});
+
+// ── Envoi notifications (appelé par le cron) ──────────────────────────────────
+async function sendShiftReminders() {
+  if (!process.env.VAPID_PUBLIC_KEY) return;
+  try {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+
+    // Shifts demain avec abonnements push
+    const shifts = await db.all(
+      `SELECT sh.id, sh.start_time, sh.end_time,
+              s.name AS site_name, s.city AS site_city,
+              a.first_name, subs.endpoint, subs.p256dh, subs.auth
+       FROM shifts sh
+       JOIN sites s ON s.id = sh.site_id
+       JOIN agents a ON a.id = sh.agent_id
+       JOIN agent_push_subscriptions subs ON subs.agent_id = sh.agent_id
+       WHERE sh.date = ?`,
+      [tomorrowStr]
+    );
+
+    let sent = 0;
+    for (const shift of shifts) {
+      try {
+        await webpush.sendNotification(
+          { endpoint: shift.endpoint, keys: { p256dh: shift.p256dh, auth: shift.auth } },
+          JSON.stringify({
+            title: `Vacation demain — ${shift.site_name}`,
+            body:  `${shift.start_time.slice(0,5)} – ${shift.end_time.slice(0,5)}${shift.site_city ? ' · ' + shift.site_city : ''}`,
+            icon:  '/icon-192.png',
+            badge: '/icon-192.png',
+            tag:   `shift-${shift.id}`,
+            data:  { url: '/agent' },
+          })
+        );
+        sent++;
+      } catch (err) {
+        // Subscription expirée → supprimer
+        if (err.statusCode === 410) {
+          await db.run('DELETE FROM agent_push_subscriptions WHERE endpoint = ?', [shift.endpoint]);
+        }
+      }
+    }
+    if (sent > 0) console.log(`[Push] ✅ ${sent} notification(s) envoyée(s) pour demain (${tomorrowStr})`);
+  } catch (e) {
+    console.error('[Push] Erreur cron:', e.message);
+  }
+}
+
 module.exports = router;
+module.exports.sendShiftReminders = sendShiftReminders;

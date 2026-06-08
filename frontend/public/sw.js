@@ -1,7 +1,6 @@
 // Service Worker — SecuroPlan PWA
-const CACHE_NAME = 'securitysaas-v1';
+const CACHE_NAME = 'securoplan-v2';
 
-// Fichiers à mettre en cache pour le mode hors-ligne
 const STATIC_ASSETS = ['/', '/dashboard', '/planning', '/agents'];
 
 self.addEventListener('install', (event) => {
@@ -22,11 +21,7 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-
-  // Ne pas intercepter les appels API
   if (url.pathname.startsWith('/api/')) return;
-
-  // Stratégie Network-first pour les pages, cache en fallback
   event.respondWith(
     fetch(event.request)
       .then(res => {
@@ -37,5 +32,40 @@ self.addEventListener('fetch', (event) => {
         return res;
       })
       .catch(() => caches.match(event.request))
+  );
+});
+
+// ── Notifications push ────────────────────────────────────────────────────────
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+  let data;
+  try { data = event.data.json(); } catch { data = { title: 'SecuroPlan', body: event.data.text() }; }
+
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'SecuroPlan', {
+      body:    data.body   || '',
+      icon:    data.icon   || '/icon-192.png',
+      badge:   data.badge  || '/icon-192.png',
+      tag:     data.tag    || 'securoplan',
+      vibrate: [200, 100, 200],
+      data:    data.data   || {},
+    })
+  );
+});
+
+// Clic sur la notification → ouvrir l'app
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url || '/';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      for (const client of list) {
+        if (client.url.includes(self.location.origin)) {
+          client.focus();
+          return;
+        }
+      }
+      clients.openWindow(url);
+    })
   );
 });

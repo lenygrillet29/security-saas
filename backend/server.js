@@ -1,5 +1,6 @@
-const express = require('express');
-const cors = require('cors');
+const express  = require('express');
+const cors     = require('cors');
+const cron     = require('node-cron');
 const { init } = require('./db/database');
 const { requireAuth } = require('./middleware/auth');
 
@@ -149,6 +150,14 @@ init()
     } else {
       console.warn('[Stripe] Non configuré (STRIPE_SECRET_KEY absent)');
     }
+  })
+  .then(() => {
+    // Cron notifications push — tous les jours à 10h : rappel shifts du lendemain
+    cron.schedule('0 10 * * *', () => {
+      const { sendShiftReminders } = require('./routes/agent-portal');
+      sendShiftReminders();
+    }, { timezone: 'Europe/Paris' });
+    console.log('[Cron] ✅ Rappels push planifiés — 10h00 Europe/Paris');
   })
   .catch(err => {
     console.error('[DB] Impossible de se connecter à PostgreSQL :', err.message);

@@ -180,6 +180,95 @@ function ShiftCard({ shift, token, onUpdated, highlight }) {
   );
 }
 
+// ── Bouton notifications push ─────────────────────────────────────────────────
+function NotifButton({ token }) {
+  const [status, setStatus]   = useState('idle'); // idle | loading | on | off | unsupported
+  const [vapidKey, setVapidKey] = useState(null);
+
+  useEffect(() => {
+    if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+      setStatus('unsupported'); return;
+    }
+    // Récupérer la clé publique VAPID
+    fetch(`${API_BASE}/agent-portal/vapid-public-key`)
+      .then(r => r.json())
+      .then(({ key }) => {
+        if (!key) { setStatus('unsupported'); return; }
+        setVapidKey(key);
+        if (Notification.permission === 'granted') setStatus('on');
+        else if (Notification.permission === 'denied') setStatus('off');
+      })
+      .catch(() => setStatus('unsupported'));
+  }, []);
+
+  function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = window.atob(base64);
+    return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+  }
+
+  async function handleEnable() {
+    setStatus('loading');
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') { setStatus('off'); return; }
+
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidKey),
+      });
+
+      await fetch(`${API_BASE}/agent-portal/${token}/subscribe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sub.toJSON()),
+      });
+      setStatus('on');
+    } catch (e) {
+      console.error(e);
+      setStatus('idle');
+    }
+  }
+
+  async function handleDisable() {
+    setStatus('loading');
+    await fetch(`${API_BASE}/agent-portal/${token}/unsubscribe`, { method: 'POST' });
+    setStatus('idle');
+  }
+
+  if (status === 'unsupported' || status === 'off') return null;
+
+  return (
+    <div className="mx-4 mt-3">
+      {status === 'on' ? (
+        <div className="flex items-center justify-between bg-emerald-600/10 border border-emerald-600/30 rounded-xl px-4 py-2.5">
+          <div className="flex items-center gap-2 text-sm text-emerald-400">
+            <span>🔔</span> Notifications activées
+          </div>
+          <button onClick={handleDisable} className="text-xs text-slate-500 hover:text-slate-300">
+            Désactiver
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={handleEnable}
+          disabled={status === 'loading'}
+          className="w-full flex items-center justify-center gap-2 bg-dark-800 border border-dark-600 hover:border-blue-500/40 hover:bg-blue-600/5 text-slate-300 hover:text-white rounded-xl px-4 py-2.5 text-sm font-medium transition-all"
+        >
+          {status === 'loading' ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <span>🔔</span>
+          )}
+          Activer les rappels de vacation
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ── Bannière d'installation PWA ───────────────────────────────────────────────
 function InstallBanner() {
   const [installPrompt, setInstallPrompt] = useState(null);
@@ -325,6 +414,7 @@ export default function AgentPortal() {
       </header>
 
       <InstallBanner />
+      <NotifButton token={token} />
 
       <main className="max-w-lg mx-auto px-4 py-5 space-y-6">
 

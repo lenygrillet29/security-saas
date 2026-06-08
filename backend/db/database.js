@@ -316,6 +316,19 @@ async function init() {
     ALTER TABLE agents ADD COLUMN IF NOT EXISTS agent_token TEXT UNIQUE;
   `);
 
+  // ── Abonnements notifications push agents ────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS agent_push_subscriptions (
+      id         SERIAL PRIMARY KEY,
+      agent_id   INTEGER NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+      endpoint   TEXT NOT NULL,
+      p256dh     TEXT NOT NULL,
+      auth       TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(agent_id, endpoint)
+    );
+  `);
+
   // ── Réinitialisation mot de passe ─────────────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS password_reset_tokens (
