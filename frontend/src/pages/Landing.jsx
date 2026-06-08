@@ -104,7 +104,7 @@ function Hero() {
         </div>
 
         <p className="mt-4 text-sm text-slate-500">
-          14 jours gratuits · Sans carte bancaire · Résiliable à tout moment
+          1er mois offert · Engagement 3 mois · Sans frais cachés
         </p>
 
         {/* Stats */}
@@ -112,7 +112,7 @@ function Hero() {
           {[
             { value: '100%', label: 'En ligne, partout' },
             { value: '24/7', label: 'Notifications push' },
-            { value: '0€', label: 'Pour démarrer' },
+            { value: '0€', label: '1er mois offert' },
           ].map(s => (
             <div key={s.label} className="bg-dark-800/60 border border-dark-700 rounded-xl p-4">
               <div className="text-2xl font-bold text-white">{s.value}</div>
@@ -206,7 +206,7 @@ const STEPS = [
     num: '01',
     icon: Lock,
     title: 'Créez votre compte',
-    desc: "Inscrivez-vous en 2 minutes. Aucune carte bancaire requise. 14 jours d'essai complet offerts.",
+    desc: "Inscrivez-vous en 2 minutes. Le premier mois est offert, puis 79€/mois avec un engagement de 3 mois.",
   },
   {
     num: '02',
@@ -282,39 +282,33 @@ function Pricing() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Trial */}
-          <div className="bg-dark-800 border border-dark-700 rounded-2xl p-8 flex flex-col">
-            <div className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">Essai gratuit</div>
-            <div className="text-4xl font-bold text-white mb-1">0€</div>
-            <div className="text-slate-500 text-sm mb-6">pendant 14 jours</div>
-            <ul className="space-y-3 mb-8 flex-1">
-              {['Accès complet à toutes les fonctionnalités', 'Sans carte bancaire', 'Résiliable à tout moment'].map(f => (
-                <li key={f} className="flex items-start gap-2.5 text-sm text-slate-400">
-                  <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                  {f}
-                </li>
-              ))}
-            </ul>
-            <Link
-              to="/register"
-              className="block text-center bg-dark-700 hover:bg-dark-600 border border-dark-600 text-white font-semibold py-3 rounded-xl transition-colors"
-            >
-              Commencer gratuitement
-            </Link>
-          </div>
-
-          {/* Pro */}
+        {/* Pricing card unique centré */}
+        <div className="max-w-lg mx-auto">
           <div className="bg-blue-600/10 border-2 border-blue-500/40 rounded-2xl p-8 flex flex-col relative">
             <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-full">
-              POPULAIRE
+              OFFRE DE LANCEMENT
             </div>
             <div className="text-sm font-semibold text-blue-300 uppercase tracking-wide mb-3">Pro</div>
-            <div className="flex items-baseline gap-1 mb-1">
-              <span className="text-4xl font-bold text-white">79€</span>
-              <span className="text-slate-400 text-sm">/mois</span>
+
+            {/* Prix barré + offre */}
+            <div className="flex items-end gap-3 mb-1">
+              <div className="flex items-baseline gap-1">
+                <span className="text-4xl font-bold text-white">79€</span>
+                <span className="text-slate-400 text-sm">/mois</span>
+              </div>
+              <div className="mb-1 bg-emerald-600/20 border border-emerald-500/30 rounded-lg px-2.5 py-1 text-emerald-300 text-xs font-semibold">
+                1er mois OFFERT
+              </div>
             </div>
-            <div className="text-slate-500 text-sm mb-6">par société, tout compris</div>
+            <div className="text-slate-500 text-sm mb-2">par société · engagement 3 mois</div>
+
+            {/* Détail engagement */}
+            <div className="bg-dark-800/60 rounded-xl p-3 mb-6 text-xs text-slate-400 leading-relaxed">
+              Mois 1 : <span className="text-emerald-400 font-semibold">0€</span>
+              {' · '}Mois 2 &amp; 3 : <span className="text-white font-semibold">79€/mois</span>
+              {' · '}À partir du mois 4 : résiliable à tout moment
+            </div>
+
             <ul className="space-y-3 mb-8 flex-1">
               {PRO_FEATURES.map(f => (
                 <li key={f} className="flex items-start gap-2.5 text-sm text-slate-300">
@@ -327,7 +321,7 @@ function Pricing() {
               to="/register"
               className="block text-center bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 rounded-xl transition-colors"
             >
-              Démarrer l'essai gratuit
+              Commencer — 1er mois gratuit
             </Link>
           </div>
         </div>
@@ -361,7 +355,7 @@ function FinalCTA() {
             Démarrer gratuitement
             <ChevronRight className="w-4 h-4" />
           </Link>
-          <p className="mt-4 text-sm text-slate-500">14 jours gratuits · Sans carte bancaire</p>
+          <p className="mt-4 text-sm text-slate-500">1er mois offert · Engagement 3 mois · Résiliable ensuite</p>
         </div>
       </div>
     </section>
