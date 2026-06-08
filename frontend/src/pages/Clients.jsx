@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, MapPin, Mail, Phone, Search, Download, FileBarChart, Link2, LinkOff, ExternalLink } from 'lucide-react';
+import { Plus, Edit2, Trash2, MapPin, Mail, Phone, Search, Download, FileBarChart, Link2, Link2Off, ExternalLink } from 'lucide-react';
 import { clientsApi, sitesApi, pdfApi, reportApi, portalApi } from '../api';
 import Modal from '../components/Modal';
 import Confirm from '../components/Confirm';
@@ -254,7 +254,7 @@ function ClientsInner() {
                             disabled={portalLoading === client.id}
                             className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-amber-600/10 rounded-lg transition-colors"
                             title="Révoquer le lien">
-                            <LinkOff className="w-3.5 h-3.5" />
+                            <Link2Off className="w-3.5 h-3.5" />
                           </button>
                         </>
                       ) : (
