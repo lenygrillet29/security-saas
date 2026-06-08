@@ -4,7 +4,7 @@
  */
 const express  = require('express');
 const router   = express.Router();
-const bcrypt   = require('bcryptjs');
+const bcrypt   = require('bcrypt');
 const { db }   = require('../db/database');
 
 const SALT_ROUNDS = 10;
