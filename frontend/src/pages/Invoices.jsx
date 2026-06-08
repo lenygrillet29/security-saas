@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Plus, FileText, CheckCircle, Clock, AlertCircle, XCircle, Trash2, Edit2, ArrowRight } from 'lucide-react';
+import { Plus, FileText, CheckCircle, Clock, AlertCircle, XCircle, Trash2, Edit2, ArrowRight, Download } from 'lucide-react';
+
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 import { invoicesApi, clientsApi, quotesApi } from '../api';
 import Modal from '../components/Modal';
 import Confirm from '../components/Confirm';
@@ -125,9 +127,21 @@ function InvoiceForm({ invoice, clients, onSave, onClose }) {
         <textarea className="input" rows={2} value={form.notes} onChange={e => setF('notes', e.target.value)} />
       </div>
 
-      <div className="flex justify-end gap-2 pt-2">
-        <button type="button" className="btn-secondary" onClick={onClose}>Annuler</button>
-        <button type="submit" className="btn-primary">{invoice?.id ? 'Modifier' : 'Créer'}</button>
+      <div className="flex justify-between items-center pt-2">
+        {invoice?.id ? (
+          <a
+            href={`${API_BASE}/pdf/invoice/${invoice.id}?token=${localStorage.getItem('auth_token')}`}
+            target="_blank"
+            rel="noreferrer"
+            className="btn-secondary flex items-center gap-2 text-sm"
+          >
+            <Download className="w-4 h-4" /> Télécharger PDF
+          </a>
+        ) : <div />}
+        <div className="flex gap-2">
+          <button type="button" className="btn-secondary" onClick={onClose}>Annuler</button>
+          <button type="submit" className="btn-primary">{invoice?.id ? 'Modifier' : 'Créer'}</button>
+        </div>
       </div>
     </form>
   );
@@ -275,6 +289,15 @@ function InvoicesInner() {
                 </div>
 
                 <div className="flex items-center gap-1 shrink-0">
+                  <a
+                    href={`${API_BASE}/pdf/invoice/${inv.id}?token=${localStorage.getItem('auth_token')}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors"
+                    title="Télécharger PDF"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                  </a>
                   {inv.status === 'draft' && (
                     <button onClick={() => handleStatusChange(inv, 'sent')}
                       className="px-2 py-1 text-xs bg-blue-600/20 text-blue-400 rounded hover:bg-blue-600/40 transition-colors">

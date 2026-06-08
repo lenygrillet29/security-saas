@@ -18,30 +18,55 @@ function createDoc() {
     margin: 40,
     size: 'A4',
     info: { Creator: 'SecuroPlan', Producer: 'SecuroPlan' },
+    bufferPages: true,
   });
   return doc;
 }
 
-function drawHeader(doc, company, title, subtitle) {
-  doc.rect(0, 0, doc.page.width, 80).fill('#1A1D2E');
-  doc
-    .fillColor('#3B82F6')
-    .fontSize(20)
-    .font('Helvetica-Bold')
-    .text(company || 'Sécurité Pro', 40, 22);
-  doc
-    .fillColor('#F1F5F9')
-    .fontSize(14)
-    .font('Helvetica-Bold')
-    .text(title, doc.page.width / 2, 22, { align: 'right', width: doc.page.width / 2 - 40 });
-  if (subtitle) {
-    doc
-      .fillColor('#94A3B8')
-      .fontSize(9)
-      .font('Helvetica')
-      .text(subtitle, doc.page.width / 2, 42, { align: 'right', width: doc.page.width / 2 - 40 });
+// Pied de page légal — appelé avant doc.end()
+function addLegalFooters(doc, settings) {
+  const parts = [];
+  if (settings.company_name)      parts.push(settings.company_name);
+  if (settings.company_siret)     parts.push(`SIRET : ${settings.company_siret}`);
+  if (settings.company_tva_number) parts.push(`TVA : ${settings.company_tva_number}`);
+  if (settings.company_cnaps)     parts.push(`CNAPS : ${settings.company_cnaps}`);
+  if (settings.company_address)   parts.push(settings.company_address);
+
+  const footerText = parts.join('  ·  ');
+  const range = doc.bufferedPageRange();
+  for (let i = 0; i < range.count; i++) {
+    doc.switchToPage(range.start + i);
+    const pageW = doc.page.width;
+    const pageH = doc.page.height;
+    doc.rect(0, pageH - 30, pageW, 30).fill('#1A1D2E');
+    doc.fillColor('#475569').fontSize(7).font('Helvetica')
+       .text(footerText, 20, pageH - 19, { width: pageW - 40, align: 'center', lineBreak: false });
   }
-  doc.moveDown(4);
+}
+
+function drawHeader(doc, settings, title, subtitle) {
+  const company = typeof settings === 'string' ? settings : (settings.company_name || 'Sécurité Pro');
+  const s = typeof settings === 'string' ? {} : settings;
+
+  doc.rect(0, 0, doc.page.width, 90).fill('#1A1D2E');
+  doc.fillColor('#3B82F6').fontSize(20).font('Helvetica-Bold').text(company, 40, 18);
+
+  // Ligne légale sous le nom
+  const legalParts = [];
+  if (s.company_siret)      legalParts.push(`SIRET : ${s.company_siret}`);
+  if (s.company_tva_number) legalParts.push(`TVA : ${s.company_tva_number}`);
+  if (s.company_cnaps)      legalParts.push(`CNAPS : ${s.company_cnaps}`);
+  if (legalParts.length > 0) {
+    doc.fillColor('#64748B').fontSize(7).font('Helvetica').text(legalParts.join('   ·   '), 40, 43);
+  }
+
+  doc.fillColor('#F1F5F9').fontSize(14).font('Helvetica-Bold')
+     .text(title, doc.page.width / 2, 18, { align: 'right', width: doc.page.width / 2 - 40 });
+  if (subtitle) {
+    doc.fillColor('#94A3B8').fontSize(9).font('Helvetica')
+       .text(subtitle, doc.page.width / 2, 40, { align: 'right', width: doc.page.width / 2 - 40 });
+  }
+  doc.moveDown(5);
 }
 
 function drawSection(doc, title) {
@@ -83,7 +108,7 @@ function generateAgentPlanning(settings, agent, shifts, startDate, endDate) {
   const doc = createDoc();
   drawHeader(
     doc,
-    settings.company_name,
+    settings,
     'PLANNING AGENT',
     `${agent.first_name} ${agent.last_name} — ${formatDate(startDate)} au ${formatDate(endDate)}`
   );
@@ -135,6 +160,7 @@ function generateAgentPlanning(settings, agent, shifts, startDate, endDate) {
   doc.text(formatHours(totalSunday), 40 + tw - 90, y + 8, { width: 45, align: 'right' });
   doc.text(formatHours(totalAll), 40 + tw - 35, y + 8, { width: 45, align: 'right' });
 
+  addLegalFooters(doc, settings);
   return doc;
 }
 
@@ -143,7 +169,7 @@ function generateSitePlanning(settings, site, client, shifts, startDate, endDate
   const doc = createDoc();
   drawHeader(
     doc,
-    settings.company_name,
+    settings,
     'PLANNING SITE',
     `${site.name} — ${formatDate(startDate)} au ${formatDate(endDate)}`
   );
@@ -179,6 +205,7 @@ function generateSitePlanning(settings, site, client, shifts, startDate, endDate
     ], y, i % 2 === 0 ? '#1A1D2E' : '#21253A');
   });
 
+  addLegalFooters(doc, settings);
   return doc;
 }
 
@@ -187,7 +214,7 @@ function generateClientPlanning(settings, client, sites, shifts, startDate, endD
   const doc = createDoc();
   drawHeader(
     doc,
-    settings.company_name,
+    settings,
     'PLANNING CLIENT',
     `${client.name} — ${formatDate(startDate)} au ${formatDate(endDate)}`
   );
@@ -225,38 +252,52 @@ function generateClientPlanning(settings, client, sites, shifts, startDate, endD
     ], y, i % 2 === 0 ? '#1A1D2E' : '#21253A');
   });
 
+  addLegalFooters(doc, settings);
   return doc;
 }
 
 // Devis
 function generateQuote(settings, quote, client, site, lines) {
   const doc = createDoc();
-  drawHeader(doc, settings.company_name, 'DEVIS', `N° ${quote.quote_number || quote.id}`);
+  drawHeader(doc, settings, 'DEVIS', `N° ${quote.quote_number || quote.id}`);
 
   // Info colonnes
   const colW = (doc.page.width - 80) / 2 - 10;
   let y = doc.y;
 
-  // Colonne émetteur
-  doc.rect(40, y, colW, 100).fill('#1A1D2E');
+  // Colonne émetteur (hauteur augmentée pour les mentions légales)
+  const emitterH = 120;
+  doc.rect(40, y, colW, emitterH).fill('#1A1D2E');
   doc.fillColor('#94A3B8').fontSize(8).font('Helvetica').text('ÉMETTEUR', 50, y + 10);
   doc.fillColor('#F1F5F9').fontSize(10).font('Helvetica-Bold').text(settings.company_name || '', 50, y + 22);
   doc.fillColor('#94A3B8').fontSize(8).font('Helvetica')
     .text(settings.company_address || '', 50, y + 36)
     .text(settings.company_phone || '', 50, y + 48)
     .text(settings.company_email || '', 50, y + 60);
+  // Mentions légales émetteur
+  let legalY = y + 74;
+  if (settings.company_siret) {
+    doc.text(`SIRET : ${settings.company_siret}`, 50, legalY); legalY += 11;
+  }
+  if (settings.company_tva_number) {
+    doc.text(`TVA : ${settings.company_tva_number}`, 50, legalY); legalY += 11;
+  }
+  if (settings.company_cnaps) {
+    doc.text(`CNAPS : ${settings.company_cnaps}`, 50, legalY);
+  }
 
   // Colonne destinataire
   const x2 = 40 + colW + 20;
-  doc.rect(x2, y, colW, 100).fill('#1A1D2E');
+  doc.rect(x2, y, colW, emitterH).fill('#1A1D2E');
   doc.fillColor('#94A3B8').fontSize(8).font('Helvetica').text('CLIENT', x2 + 10, y + 10);
   doc.fillColor('#F1F5F9').fontSize(10).font('Helvetica-Bold').text(client.name || '', x2 + 10, y + 22);
   doc.fillColor('#94A3B8').fontSize(8).font('Helvetica')
     .text(client.address || '', x2 + 10, y + 36)
     .text(client.email || '', x2 + 10, y + 48)
     .text(client.phone || '', x2 + 10, y + 60);
+  if (client.siret) doc.text(`SIRET : ${client.siret}`, x2 + 10, y + 74);
 
-  doc.y = y + 110;
+  doc.y = y + emitterH + 10;
 
   // Infos devis
   doc.rect(40, doc.y, doc.page.width - 80, 40).fill('#2D3555');
@@ -333,6 +374,114 @@ function generateQuote(settings, quote, client, site, lines) {
     doc.fillColor('#94A3B8').fontSize(9).font('Helvetica').text(quote.notes, 50, doc.y);
   }
 
+  addLegalFooters(doc, settings);
+  return doc;
+}
+
+// Facture
+function generateInvoice(settings, invoice, client, lines) {
+  const doc = createDoc();
+  drawHeader(doc, settings, 'FACTURE', `N° ${invoice.invoice_number || invoice.id}`);
+
+  const colW = (doc.page.width - 80) / 2 - 10;
+  let y = doc.y;
+  const emitterH = 120;
+
+  // Colonne émetteur
+  doc.rect(40, y, colW, emitterH).fill('#1A1D2E');
+  doc.fillColor('#94A3B8').fontSize(8).font('Helvetica').text('ÉMETTEUR', 50, y + 10);
+  doc.fillColor('#F1F5F9').fontSize(10).font('Helvetica-Bold').text(settings.company_name || '', 50, y + 22);
+  doc.fillColor('#94A3B8').fontSize(8).font('Helvetica')
+    .text(settings.company_address || '', 50, y + 36)
+    .text(settings.company_phone || '', 50, y + 48)
+    .text(settings.company_email || '', 50, y + 60);
+  let legalY = y + 74;
+  if (settings.company_siret)      { doc.text(`SIRET : ${settings.company_siret}`, 50, legalY); legalY += 11; }
+  if (settings.company_tva_number) { doc.text(`TVA : ${settings.company_tva_number}`, 50, legalY); legalY += 11; }
+  if (settings.company_cnaps)      { doc.text(`CNAPS : ${settings.company_cnaps}`, 50, legalY); }
+
+  // Colonne client
+  const x2 = 40 + colW + 20;
+  doc.rect(x2, y, colW, emitterH).fill('#1A1D2E');
+  doc.fillColor('#94A3B8').fontSize(8).font('Helvetica').text('CLIENT', x2 + 10, y + 10);
+  doc.fillColor('#F1F5F9').fontSize(10).font('Helvetica-Bold').text(client.name || '', x2 + 10, y + 22);
+  doc.fillColor('#94A3B8').fontSize(8).font('Helvetica')
+    .text(client.address || '', x2 + 10, y + 36)
+    .text(client.email || '', x2 + 10, y + 48)
+    .text(client.phone || '', x2 + 10, y + 60);
+  if (client.siret) doc.text(`SIRET : ${client.siret}`, x2 + 10, y + 74);
+
+  doc.y = y + emitterH + 10;
+
+  // Bandeau infos facture
+  doc.rect(40, doc.y, doc.page.width - 80, 46).fill('#2D3555');
+  const iy = doc.y;
+  doc.fillColor('#3B82F6').fontSize(16).font('Helvetica-Bold').text(invoice.title || 'Facture', 50, iy + 12);
+  doc.fillColor('#94A3B8').fontSize(8).font('Helvetica')
+    .text(`Date d'émission : ${formatDate(invoice.issue_date)}`, doc.page.width - 200, iy + 8)
+    .text(`Échéance : ${invoice.due_date ? formatDate(invoice.due_date) : '-'}`, doc.page.width - 200, iy + 20)
+    .text(`Statut : ${invoice.status === 'paid' ? '✓ Payée' : invoice.status === 'sent' ? 'Envoyée' : 'Brouillon'}`, doc.page.width - 200, iy + 32);
+  doc.y = iy + 56;
+  doc.moveDown(0.5);
+
+  // Tableau des lignes
+  const cols = [
+    { label: 'Description', width: 220 },
+    { label: 'Qté', width: 50, align: 'right' },
+    { label: 'Prix unit. HT', width: 80, align: 'right' },
+    { label: 'Total HT', width: 80, align: 'right' },
+  ];
+
+  let ty = tableHeader(doc, cols, doc.y);
+  let grandTotal = 0;
+
+  lines.forEach((l, i) => {
+    if (ty > doc.page.height - 120) { doc.addPage(); ty = 60; }
+    const total = l.quantity * l.unit_price;
+    grandTotal += total;
+    ty = tableRow(doc, [
+      { text: l.description, width: 220 },
+      { text: String(l.quantity), width: 50, align: 'right' },
+      { text: `${parseFloat(l.unit_price).toFixed(2)} €`, width: 80, align: 'right' },
+      { text: `${total.toFixed(2)} €`, width: 80, align: 'right' },
+    ], ty, i % 2 === 0 ? '#1A1D2E' : '#21253A');
+  });
+
+  // Totaux TVA
+  if (ty > doc.page.height - 140) { doc.addPage(); ty = 60; }
+  ty += 10;
+  const tvaRate = parseFloat(invoice.tva_rate || settings.tva_rate || 20);
+  const tvaAmount = grandTotal * tvaRate / 100;
+  const totalTTC = grandTotal + tvaAmount;
+
+  const totalX = doc.page.width - 200;
+  doc.rect(totalX, ty, 160, 22).fill('#2D3555');
+  doc.fillColor('#94A3B8').fontSize(9).font('Helvetica').text('Total HT', totalX + 10, ty + 7);
+  doc.fillColor('#F1F5F9').text(`${grandTotal.toFixed(2)} €`, totalX + 10, ty + 7, { align: 'right', width: 140 });
+  ty += 22;
+
+  doc.rect(totalX, ty, 160, 22).fill('#21253A');
+  doc.fillColor('#94A3B8').fontSize(9).text(`TVA ${tvaRate}%`, totalX + 10, ty + 7);
+  doc.fillColor('#F1F5F9').text(`${tvaAmount.toFixed(2)} €`, totalX + 10, ty + 7, { align: 'right', width: 140 });
+  ty += 22;
+
+  doc.rect(totalX, ty, 160, 28).fill('#3B82F6');
+  doc.fillColor('#FFFFFF').fontSize(11).font('Helvetica-Bold').text('Total TTC', totalX + 10, ty + 8);
+  doc.text(`${totalTTC.toFixed(2)} €`, totalX + 10, ty + 8, { align: 'right', width: 140 });
+
+  // Mentions de paiement
+  ty += 44;
+  if (ty > doc.page.height - 120) { doc.addPage(); ty = 60; }
+  doc.fillColor('#64748B').fontSize(8).font('Helvetica')
+     .text('Paiement par virement bancaire. En cas de retard, des pénalités de retard au taux légal en vigueur seront appliquées.', 40, ty, { width: doc.page.width - 80 });
+
+  if (invoice.notes) {
+    ty += 30;
+    drawSection(doc, 'Notes');
+    doc.fillColor('#94A3B8').fontSize(9).font('Helvetica').text(invoice.notes, 50, doc.y);
+  }
+
+  addLegalFooters(doc, settings);
   return doc;
 }
 
@@ -347,4 +496,5 @@ module.exports = {
   generateSitePlanning,
   generateClientPlanning,
   generateQuote,
+  generateInvoice,
 };

@@ -6,6 +6,7 @@ const {
   generateSitePlanning,
   generateClientPlanning,
   generateQuote,
+  generateInvoice,
 } = require('../utils/pdfGenerator');
 
 async function getSettings(companyId) {
@@ -95,6 +96,22 @@ router.get('/quote/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── Facture PDF ──────────────────────────────────────────────────────────────
+router.get('/invoice/:id', async (req, res) => {
+  try {
+    const invoice = await db.get(
+      `SELECT i.*, c.name as client_name FROM invoices i JOIN clients c ON i.client_id = c.id WHERE i.id = ? AND i.company_id = ?`,
+      [req.params.id, req.user.companyId]
+    );
+    if (!invoice) return res.status(404).json({ error: 'Facture non trouvée' });
+    const client  = await db.get('SELECT * FROM clients WHERE id = ?', [invoice.client_id]);
+    const lines   = await db.all('SELECT * FROM invoice_lines WHERE invoice_id = ? ORDER BY id', [invoice.id]);
+    const settings = await getSettings(req.user.companyId);
+    const doc = generateInvoice(settings, invoice, client, lines);
+    streamPdf(res, doc, `facture_${invoice.invoice_number || invoice.id}.pdf`);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── Rapport mensuel client ────────────────────────────────────────────────────
 // GET /api/pdf/report/monthly/:clientId?month=2026-06
 router.get('/report/monthly/:clientId', async (req, res) => {
@@ -122,7 +139,7 @@ router.get('/report/monthly/:clientId', async (req, res) => {
 
     const settings = await getSettings(req.user.companyId);
     const PDFDocument = require('pdfkit');
-    const doc = new PDFDocument({ margin: 40, size: 'A4', info: { Creator: 'SecuroPlan' } });
+    const doc = new PDFDocument({ margin: 40, size: 'A4', bufferPages: true, info: { Creator: 'SecuroPlan' } });
 
     // En-tête
     doc.rect(0, 0, doc.page.width, 70).fill('#1A1D2E');
@@ -178,10 +195,22 @@ router.get('/report/monthly/:clientId', async (req, res) => {
       y += 4;
     }
 
-    // Pied de page
-    const pageCount = doc.bufferedPageRange?.()?.count || 1;
-    doc.fillColor('#475569').fontSize(8)
-       .text(`SecuroPlan — Rapport généré le ${new Date().toLocaleDateString('fr-FR')}`, 40, doc.page.height - 40, { align: 'center', width: doc.page.width - 80 });
+    // Pied de page légal sur toutes les pages
+    const range = doc.bufferedPageRange();
+    const legalParts = [];
+    if (settings.company_name)       legalParts.push(settings.company_name);
+    if (settings.company_siret)      legalParts.push(`SIRET : ${settings.company_siret}`);
+    if (settings.company_tva_number) legalParts.push(`TVA : ${settings.company_tva_number}`);
+    if (settings.company_cnaps)      legalParts.push(`CNAPS : ${settings.company_cnaps}`);
+    const footerText = legalParts.join('  ·  ') || `SecuroPlan — Rapport généré le ${new Date().toLocaleDateString('fr-FR')}`;
+    for (let i = 0; i < range.count; i++) {
+      doc.switchToPage(range.start + i);
+      const pw = doc.page.width;
+      const ph = doc.page.height;
+      doc.rect(0, ph - 30, pw, 30).fill('#1A1D2E');
+      doc.fillColor('#475569').fontSize(7).font('Helvetica')
+         .text(footerText, 20, ph - 19, { width: pw - 40, align: 'center', lineBreak: false });
+    }
 
     const monthLabel = new Date(startDate).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }).replace(' ', '_');
     streamPdf(res, doc, `rapport_${client.name}_${monthLabel}.pdf`);

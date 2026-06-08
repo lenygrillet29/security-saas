@@ -22,6 +22,9 @@ function SettingsInner() {
     company_address: '',
     company_email: '',
     company_phone: '',
+    company_siret: '',
+    company_tva_number: '',
+    company_cnaps: '',
     smtp_host: '',
     smtp_port: '587',
     smtp_user: '',
@@ -77,6 +80,20 @@ function SettingsInner() {
             <div>
               <label className="label">Téléphone</label>
               <input className="input" value={form.company_phone} onChange={e => set('company_phone', e.target.value)} />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="label">SIRET</label>
+              <input className="input" value={form.company_siret} onChange={e => set('company_siret', e.target.value)} placeholder="123 456 789 00012" />
+            </div>
+            <div>
+              <label className="label">N° TVA intracommunautaire</label>
+              <input className="input" value={form.company_tva_number} onChange={e => set('company_tva_number', e.target.value)} placeholder="FR 12 345678900" />
+            </div>
+            <div>
+              <label className="label">N° autorisation CNAPS</label>
+              <input className="input" value={form.company_cnaps} onChange={e => set('company_cnaps', e.target.value)} placeholder="AUT-075-2114-01-12-20XXXXXX" />
             </div>
           </div>
         </Section>
