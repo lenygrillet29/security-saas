@@ -2,9 +2,9 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Calendar, Users, Building2,
   MapPin, FileText, Settings, Shield, ClipboardList,
-  LogOut, ChevronDown, CreditCard, ScrollText, Receipt, Activity, TrendingUp, Calculator, X,
+  LogOut, ChevronDown, CreditCard, ScrollText, Receipt, Activity, TrendingUp, Calculator, X, Download,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
 const NAV = [
@@ -32,6 +32,26 @@ export default function Sidebar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const [installed, setInstalled] = useState(false);
+
+  useEffect(() => {
+    // Capturer l'événement beforeinstallprompt
+    const handler = (e) => { e.preventDefault(); setInstallPrompt(e); };
+    window.addEventListener('beforeinstallprompt', handler);
+    // Détecter si déjà installé
+    window.addEventListener('appinstalled', () => { setInstalled(true); setInstallPrompt(null); });
+    // Déjà en mode standalone = déjà installé
+    if (window.matchMedia('(display-mode: standalone)').matches) setInstalled(true);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  async function handleInstall() {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') { setInstalled(true); setInstallPrompt(null); }
+  }
 
   const handleLogout = () => {
     logout();
@@ -104,6 +124,17 @@ export default function Sidebar() {
           <CreditCard className="w-4 h-4 shrink-0" />
           Abonnement
         </NavLink>
+        {/* Bouton installer l'appli */}
+        {!installed && installPrompt && (
+          <button
+            onClick={handleInstall}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-emerald-400 hover:bg-emerald-600/10 border border-emerald-600/30 transition-colors"
+          >
+            <Download className="w-4 h-4 shrink-0" />
+            <span className="flex-1 text-left">Installer l'application</span>
+          </button>
+        )}
+
         <NavLink
           to="/settings"
           className={({ isActive }) =>
