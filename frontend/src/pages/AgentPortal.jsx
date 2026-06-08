@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   Shield, MapPin, Clock, LogIn, LogOut, CheckCircle,
-  AlertTriangle, Loader2, Calendar, ChevronRight, Info,
+  AlertTriangle, Loader2, Calendar, ChevronRight, Info, Download, X, Share,
 } from 'lucide-react';
 import { format, parseISO, isToday, isTomorrow, differenceInMinutes } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -180,6 +180,80 @@ function ShiftCard({ shift, token, onUpdated, highlight }) {
   );
 }
 
+// ── Bannière d'installation PWA ───────────────────────────────────────────────
+function InstallBanner() {
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const [dismissed, setDismissed]         = useState(false);
+  const [installed, setInstalled]         = useState(false);
+
+  // Détecter iOS
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone === true;
+
+  useEffect(() => {
+    if (isStandalone) { setInstalled(true); return; }
+    const handler = (e) => { e.preventDefault(); setInstallPrompt(e); };
+    window.addEventListener('beforeinstallprompt', handler);
+    window.addEventListener('appinstalled', () => setInstalled(true));
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  async function handleInstall() {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') setInstalled(true);
+  }
+
+  if (installed || dismissed) return null;
+  // Android : bouton natif
+  if (installPrompt) return (
+    <div className="mx-4 mt-4 bg-blue-600/15 border border-blue-500/30 rounded-2xl p-4 flex items-center gap-3">
+      <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shrink-0">
+        <Shield className="w-5 h-5 text-white" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-semibold text-white">Installer l'application</div>
+        <div className="text-xs text-slate-400">Accès rapide depuis votre écran d'accueil</div>
+      </div>
+      <button onClick={handleInstall}
+        className="shrink-0 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg transition-colors">
+        Installer
+      </button>
+      <button onClick={() => setDismissed(true)} className="text-slate-500 hover:text-slate-300">
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  );
+  // iOS : instructions manuelles
+  if (isIOS) return (
+    <div className="mx-4 mt-4 bg-dark-800 border border-dark-600 rounded-2xl p-4">
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="text-sm font-semibold text-white">📲 Installer sur votre iPhone</div>
+        <button onClick={() => setDismissed(true)} className="text-slate-500 hover:text-slate-300 shrink-0">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+      <ol className="text-xs text-slate-400 space-y-1.5">
+        <li className="flex items-center gap-2">
+          <span className="w-5 h-5 rounded-full bg-blue-600/30 text-blue-400 flex items-center justify-center text-xs font-bold shrink-0">1</span>
+          Appuyez sur <span className="inline-flex items-center gap-0.5 text-blue-400 font-medium mx-1">Partager <span className="text-base">⎙</span></span> en bas de Safari
+        </li>
+        <li className="flex items-center gap-2">
+          <span className="w-5 h-5 rounded-full bg-blue-600/30 text-blue-400 flex items-center justify-center text-xs font-bold shrink-0">2</span>
+          Faites défiler et appuyez sur <span className="text-white font-medium mx-1">"Sur l'écran d'accueil"</span>
+        </li>
+        <li className="flex items-center gap-2">
+          <span className="w-5 h-5 rounded-full bg-blue-600/30 text-blue-400 flex items-center justify-center text-xs font-bold shrink-0">3</span>
+          Appuyez sur <span className="text-white font-medium mx-1">"Ajouter"</span> en haut à droite
+        </li>
+      </ol>
+    </div>
+  );
+  return null;
+}
+
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function AgentPortal() {
   const { token } = useParams();
@@ -249,6 +323,8 @@ export default function AgentPortal() {
           </div>
         </div>
       </header>
+
+      <InstallBanner />
 
       <main className="max-w-lg mx-auto px-4 py-5 space-y-6">
 
