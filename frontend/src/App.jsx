@@ -24,6 +24,9 @@ import ClientPortal from './pages/ClientPortal';
 import AgentPortal from './pages/AgentPortal';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import MentionsLegales from './pages/MentionsLegales';
+import CGV from './pages/CGV';
+import Confidentialite from './pages/Confidentialite';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -62,6 +65,10 @@ export default function App() {
             {/* Mot de passe oublié */}
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password/:token" element={<ResetPassword />} />
+            {/* Pages légales */}
+            <Route path="/mentions-legales" element={<MentionsLegales />} />
+            <Route path="/cgv" element={<CGV />} />
+            <Route path="/confidentialite" element={<Confidentialite />} />
 
             {/* Application protégée */}
             <Route
