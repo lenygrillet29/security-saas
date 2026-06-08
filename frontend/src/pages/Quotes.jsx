@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, Download, Mail, Search, Sun, Moon } from 'lucide-react';
+import { Plus, Edit2, Trash2, Download, Mail, Search, Sun, Moon, FileDown, Printer } from 'lucide-react';
 import { quotesApi, clientsApi, sitesApi, pdfApi, emailApi } from '../api';
 import Modal from '../components/Modal';
 import Confirm from '../components/Confirm';
@@ -204,9 +204,22 @@ function QuoteForm({ quote, clients, sites, onSave, onClose }) {
         <textarea className="input" rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} />
       </div>
 
-      <div className="flex justify-end gap-2 pt-2">
-        <button type="button" className="btn-secondary" onClick={onClose}>Annuler</button>
-        <button type="submit" className="btn-primary">{quote?.id ? 'Modifier' : 'Créer le devis'}</button>
+      <div className="flex justify-between items-center pt-2">
+        {/* Bouton PDF — uniquement si le devis existe déjà */}
+        {quote?.id ? (
+          <button
+            type="button"
+            onClick={() => pdfApi.quote(quote.id)}
+            className="flex items-center gap-2 px-4 py-2 bg-dark-700 hover:bg-dark-600 border border-dark-600 text-slate-300 hover:text-white rounded-lg text-sm font-medium transition-colors"
+          >
+            <FileDown className="w-4 h-4" />
+            Télécharger PDF
+          </button>
+        ) : <div />}
+        <div className="flex gap-2">
+          <button type="button" className="btn-secondary" onClick={onClose}>Annuler</button>
+          <button type="submit" className="btn-primary">{quote?.id ? 'Enregistrer' : 'Créer le devis'}</button>
+        </div>
       </div>
     </form>
   );
@@ -361,8 +374,9 @@ function QuotesInner() {
                     <td className="py-3 px-3">
                       <div className="flex items-center justify-end gap-1">
                         <button onClick={() => pdfApi.quote(quote.id)}
-                          className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-600/10 rounded-lg transition-colors" title="PDF">
-                          <Download className="w-3.5 h-3.5" />
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-600/10 rounded-lg transition-colors text-xs font-medium" title="Télécharger PDF">
+                          <FileDown className="w-3.5 h-3.5" />
+                          PDF
                         </button>
                         <button onClick={() => setEmailModal({ quoteId: quote.id, client })}
                           className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-600/10 rounded-lg transition-colors" title="Email">
