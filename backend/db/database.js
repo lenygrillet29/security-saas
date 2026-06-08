@@ -227,6 +227,11 @@ async function init() {
     ALTER TABLE shifts ADD COLUMN IF NOT EXISTS checkin_distance INTEGER;
   `);
 
+  // ── Heures fériées ────────────────────────────────────────────────────────────
+  await pool.query(`
+    ALTER TABLE shifts ADD COLUMN IF NOT EXISTS hours_holiday REAL DEFAULT 0;
+  `);
+
   // ── Journal d'audit ───────────────────────────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS audit_logs (

@@ -19,6 +19,7 @@ import SignContract from './pages/SignContract';
 import Invoices from './pages/Invoices';
 import AuditLog from './pages/AuditLog';
 import Simulation from './pages/Simulation';
+import RecapHeures from './pages/RecapHeures';
 import Chiffrage from './pages/Chiffrage';
 import ClientPortal from './pages/ClientPortal';
 import AgentPortal from './pages/AgentPortal';
@@ -90,6 +91,7 @@ export default function App() {
               <Route path="invoices"  element={<Invoices />} />
               <Route path="audit"     element={<AuditLog />} />
               <Route path="simulation" element={<Simulation />} />
+              <Route path="recap-heures" element={<RecapHeures />} />
               <Route path="chiffrage"  element={<Chiffrage />} />
               <Route path="settings" element={<Settings />} />
               <Route path="billing" element={<Billing />} />
