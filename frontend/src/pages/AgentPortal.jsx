@@ -180,26 +180,9 @@ function ShiftCard({ shift, token, onUpdated, highlight }) {
   );
 }
 
-// ── Bouton notifications push ─────────────────────────────────────────────────
+// ── Notifications push — activation automatique ───────────────────────────────
 function NotifButton({ token }) {
-  const [status, setStatus]   = useState('idle'); // idle | loading | on | off | unsupported
-  const [vapidKey, setVapidKey] = useState(null);
-
-  useEffect(() => {
-    if (!('Notification' in window) || !('serviceWorker' in navigator)) {
-      setStatus('unsupported'); return;
-    }
-    // Récupérer la clé publique VAPID
-    fetch(`${API_BASE}/agent-portal/vapid-public-key`)
-      .then(r => r.json())
-      .then(({ key }) => {
-        if (!key) { setStatus('unsupported'); return; }
-        setVapidKey(key);
-        if (Notification.permission === 'granted') setStatus('on');
-        else if (Notification.permission === 'denied') setStatus('off');
-      })
-      .catch(() => setStatus('unsupported'));
-  }, []);
+  const [status, setStatus] = useState('idle'); // idle | loading | on | off | unsupported | blocked
 
   function urlBase64ToUint8Array(base64String) {
     const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -208,18 +191,15 @@ function NotifButton({ token }) {
     return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
   }
 
-  async function handleEnable() {
-    setStatus('loading');
+  async function subscribe(key) {
     try {
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') { setStatus('off'); return; }
-
       const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.subscribe({
+      // Vérifier si déjà souscrit
+      const existing = await reg.pushManager.getSubscription();
+      const sub = existing || await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidKey),
+        applicationServerKey: urlBase64ToUint8Array(key),
       });
-
       await fetch(`${API_BASE}/agent-portal/${token}/subscribe`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -227,44 +207,72 @@ function NotifButton({ token }) {
       });
       setStatus('on');
     } catch (e) {
-      console.error(e);
+      console.error('[Push] subscribe error:', e);
       setStatus('idle');
     }
   }
 
-  async function handleDisable() {
+  async function autoActivate() {
+    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+      setStatus('unsupported'); return;
+    }
     setStatus('loading');
-    await fetch(`${API_BASE}/agent-portal/${token}/unsubscribe`, { method: 'POST' });
-    setStatus('idle');
+    try {
+      // Récupérer la clé VAPID
+      const res = await fetch(`${API_BASE}/agent-portal/vapid-public-key`);
+      const { key } = await res.json();
+      if (!key) { setStatus('unsupported'); return; }
+
+      if (Notification.permission === 'granted') {
+        await subscribe(key);
+        return;
+      }
+      if (Notification.permission === 'denied') {
+        setStatus('blocked'); return;
+      }
+      // Demander la permission automatiquement
+      const perm = await Notification.requestPermission();
+      if (perm === 'granted') {
+        await subscribe(key);
+      } else {
+        setStatus('blocked');
+      }
+    } catch (e) {
+      console.error('[Push] autoActivate error:', e);
+      setStatus('idle');
+    }
   }
 
-  if (status === 'unsupported' || status === 'off') return null;
+  // Lancer dès que le composant monte
+  useEffect(() => { autoActivate(); }, []); // eslint-disable-line
 
+  // Affichage discret — seulement si bloqué ou activé
+  if (status === 'unsupported') return null;
+  if (status === 'idle') return null;
+
+  if (status === 'on') {
+    return (
+      <div className="mx-4 mt-3 flex items-center gap-2 text-xs text-emerald-400/70">
+        <span>🔔</span> Rappels de vacation activés
+      </div>
+    );
+  }
+
+  if (status === 'blocked') {
+    return (
+      <div className="mx-4 mt-3 bg-amber-600/10 border border-amber-600/20 rounded-xl px-4 py-2.5 flex items-center gap-2">
+        <span className="text-amber-400">🔔</span>
+        <span className="text-xs text-amber-300/80 flex-1">
+          Activez les notifications dans les réglages de votre navigateur pour recevoir vos rappels de vacation.
+        </span>
+      </div>
+    );
+  }
+
+  // loading
   return (
-    <div className="mx-4 mt-3">
-      {status === 'on' ? (
-        <div className="flex items-center justify-between bg-emerald-600/10 border border-emerald-600/30 rounded-xl px-4 py-2.5">
-          <div className="flex items-center gap-2 text-sm text-emerald-400">
-            <span>🔔</span> Notifications activées
-          </div>
-          <button onClick={handleDisable} className="text-xs text-slate-500 hover:text-slate-300">
-            Désactiver
-          </button>
-        </div>
-      ) : (
-        <button
-          onClick={handleEnable}
-          disabled={status === 'loading'}
-          className="w-full flex items-center justify-center gap-2 bg-dark-800 border border-dark-600 hover:border-blue-500/40 hover:bg-blue-600/5 text-slate-300 hover:text-white rounded-xl px-4 py-2.5 text-sm font-medium transition-all"
-        >
-          {status === 'loading' ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <span>🔔</span>
-          )}
-          Activer les rappels de vacation
-        </button>
-      )}
+    <div className="mx-4 mt-3 flex items-center gap-2 text-xs text-slate-500">
+      <Loader2 className="w-3 h-3 animate-spin" /> Activation des rappels…
     </div>
   );
 }
