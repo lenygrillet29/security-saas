@@ -152,12 +152,13 @@ init()
     }
   })
   .then(() => {
-    // Cron notifications push — tous les jours à 10h : rappel shifts du lendemain
-    cron.schedule('0 10 * * *', () => {
-      const { sendShiftReminders } = require('./routes/agent-portal');
-      sendShiftReminders();
+    // Cron notifications push — toutes les 15 min
+    // Envoie 2 rappels par vacation : 24h avant + 2h avant
+    cron.schedule('*/15 * * * *', () => {
+      const { sendTimedReminders } = require('./routes/agent-portal');
+      sendTimedReminders();
     }, { timezone: 'Europe/Paris' });
-    console.log('[Cron] ✅ Rappels push planifiés — 10h00 Europe/Paris');
+    console.log('[Cron] ✅ Rappels push planifiés — toutes les 15 min (24h et 2h avant chaque vacation)');
   })
   .catch(err => {
     console.error('[DB] Impossible de se connecter à PostgreSQL :', err.message);

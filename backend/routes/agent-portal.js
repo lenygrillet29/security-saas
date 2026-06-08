@@ -162,54 +162,94 @@ router.get('/vapid-public-key', (req, res) => {
   res.json({ key: process.env.VAPID_PUBLIC_KEY || null });
 });
 
-// ── Envoi notifications (appelé par le cron) ──────────────────────────────────
-async function sendShiftReminders() {
+// ── Helpers timezone Europe/Paris ─────────────────────────────────────────────
+function getParisDateTime(date) {
+  // Retourne { date: 'YYYY-MM-DD', h, m } en heure de Paris
+  const str = date.toLocaleString('sv-SE', { timeZone: 'Europe/Paris' });
+  // sv-SE → "2024-01-15 08:30:00"
+  const [datePart, timePart] = str.split(' ');
+  const [h, m] = timePart.split(':').map(Number);
+  return { date: datePart, h, m };
+}
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+
+function shiftTime(h, m, deltaMin) {
+  // Ajoute deltaMin minutes à h:m, retourne "HH:MM"
+  let total = ((h * 60 + m + deltaMin) % 1440 + 1440) % 1440;
+  return `${pad2(Math.floor(total / 60))}:${pad2(total % 60)}`;
+}
+
+// ── Envoi notifications — appelé toutes les 15 min par le cron ────────────────
+async function sendTimedReminders() {
   if (!process.env.VAPID_PUBLIC_KEY) return;
+
+  const WINDOW = 7; // ±7 min (fenêtre 15 min sans doublon)
+
+  const checks = [
+    {
+      minutesBefore: 24 * 60,
+      label: '24h',
+      title: (site) => `📅 Vacation demain — ${site}`,
+      body:  (s)    => `${s.start_time.slice(0,5)} – ${s.end_time.slice(0,5)}${s.site_city ? ' · ' + s.site_city : ''}`,
+    },
+    {
+      minutesBefore: 2 * 60,
+      label: '2h',
+      title: (site) => `⏰ Vacation dans 2h — ${site}`,
+      body:  (s)    => `Début à ${s.start_time.slice(0,5)}${s.site_city ? ' · ' + s.site_city : ''}`,
+    },
+  ];
+
   try {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+    let totalSent = 0;
 
-    // Shifts demain avec abonnements push
-    const shifts = await db.all(
-      `SELECT sh.id, sh.start_time, sh.end_time,
-              s.name AS site_name, s.city AS site_city,
-              a.first_name, subs.endpoint, subs.p256dh, subs.auth
-       FROM shifts sh
-       JOIN sites s ON s.id = sh.site_id
-       JOIN agents a ON a.id = sh.agent_id
-       JOIN agent_push_subscriptions subs ON subs.agent_id = sh.agent_id
-       WHERE sh.date = ?`,
-      [tomorrowStr]
-    );
+    for (const check of checks) {
+      const target = new Date(Date.now() + check.minutesBefore * 60000);
+      const { date, h, m } = getParisDateTime(target);
 
-    let sent = 0;
-    for (const shift of shifts) {
-      try {
-        await webpush.sendNotification(
-          { endpoint: shift.endpoint, keys: { p256dh: shift.p256dh, auth: shift.auth } },
-          JSON.stringify({
-            title: `Vacation demain — ${shift.site_name}`,
-            body:  `${shift.start_time.slice(0,5)} – ${shift.end_time.slice(0,5)}${shift.site_city ? ' · ' + shift.site_city : ''}`,
-            icon:  '/icon-192.png',
-            badge: '/icon-192.png',
-            tag:   `shift-${shift.id}`,
-            data:  { url: '/agent' },
-          })
-        );
-        sent++;
-      } catch (err) {
-        // Subscription expirée → supprimer
-        if (err.statusCode === 410) {
-          await db.run('DELETE FROM agent_push_subscriptions WHERE endpoint = ?', [shift.endpoint]);
+      const timeMin = shiftTime(h, m, -WINDOW);
+      const timeMax = shiftTime(h, m, +WINDOW);
+
+      const shifts = await db.all(
+        `SELECT sh.id, sh.start_time, sh.end_time,
+                s.name AS site_name, s.city AS site_city,
+                a.first_name, subs.endpoint, subs.p256dh, subs.auth
+         FROM shifts sh
+         JOIN sites s    ON s.id = sh.site_id
+         JOIN agents a   ON a.id = sh.agent_id
+         JOIN agent_push_subscriptions subs ON subs.agent_id = sh.agent_id
+         WHERE sh.date = ? AND sh.start_time >= ? AND sh.start_time <= ?`,
+        [date, timeMin, timeMax]
+      );
+
+      for (const shift of shifts) {
+        try {
+          await webpush.sendNotification(
+            { endpoint: shift.endpoint, keys: { p256dh: shift.p256dh, auth: shift.auth } },
+            JSON.stringify({
+              title: check.title(shift.site_name),
+              body:  check.body(shift),
+              icon:  '/icon-192.png',
+              badge: '/icon-192.png',
+              tag:   `shift-${shift.id}-${check.label}`,
+              data:  { url: '/agent' },
+            })
+          );
+          totalSent++;
+        } catch (err) {
+          if (err.statusCode === 410) {
+            await db.run('DELETE FROM agent_push_subscriptions WHERE endpoint = ?', [shift.endpoint]);
+          }
         }
       }
     }
-    if (sent > 0) console.log(`[Push] ✅ ${sent} notification(s) envoyée(s) pour demain (${tomorrowStr})`);
+
+    if (totalSent > 0) console.log(`[Push] ✅ ${totalSent} notification(s) envoyée(s)`);
   } catch (e) {
     console.error('[Push] Erreur cron:', e.message);
   }
 }
 
 module.exports = router;
-module.exports.sendShiftReminders = sendShiftReminders;
+module.exports.sendTimedReminders = sendTimedReminders;
