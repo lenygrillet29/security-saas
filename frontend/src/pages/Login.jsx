@@ -59,6 +59,8 @@ export default function Login() {
                 autoFocus
                 value={form.email}
                 onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                name="email"
+                autoComplete="email"
                 className="w-full px-3 py-2.5 bg-dark-700 border border-dark-500 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
                 placeholder="vous@entreprise.com"
               />
@@ -75,6 +77,8 @@ export default function Login() {
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
+                  name="password"
+                  autoComplete="current-password"
                   value={form.password}
                   onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
                   className="w-full px-3 py-2.5 pr-10 bg-dark-700 border border-dark-500 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
