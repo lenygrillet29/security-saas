@@ -164,10 +164,11 @@ router.post('/login', async (req, res) => {
 
     await db.run('UPDATE users SET last_login = NOW() WHERE id = ?', [user.id]);
 
+    const rememberMe = req.body.remember_me === true || req.body.remember_me === 'true';
     const token = jwt.sign(
       { userId: user.id, companyId: user.company_id, role: user.role, email: user.email },
       JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: rememberMe ? '30d' : '7d' }
     );
 
     res.json({

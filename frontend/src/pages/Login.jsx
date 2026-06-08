@@ -7,6 +7,7 @@ export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({ email: '', password: '' });
+  const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -16,7 +17,7 @@ export default function Login() {
     setError('');
     setLoading(true);
     try {
-      await login(form.email, form.password);
+      await login(form.email, form.password, rememberMe);
       navigate('/dashboard');
     } catch (err) {
       setError(err.message || 'Erreur de connexion');
@@ -89,10 +90,23 @@ export default function Login() {
               </div>
             </div>
 
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="remember"
+                checked={rememberMe}
+                onChange={e => setRememberMe(e.target.checked)}
+                className="w-4 h-4 accent-blue-500 rounded"
+              />
+              <label htmlFor="remember" className="text-sm text-slate-400 cursor-pointer select-none">
+                Se souvenir de moi <span className="text-slate-600">(30 jours)</span>
+              </label>
+            </div>
+
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/50 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 mt-2"
+              className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/50 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               {loading ? 'Connexion…' : 'Se connecter'}
