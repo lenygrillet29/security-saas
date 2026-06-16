@@ -55,8 +55,7 @@ router.post('/', requireWriter, async (req, res) => {
           startTime:      shift.start_time?.slice(0, 5),
           endTime:        shift.end_time?.slice(0, 5),
           siteName:       shift.site_name,
-          acceptUrl:      `${APP_URL}/offer/${token}/accept`,
-          declineUrl:     `${APP_URL}/offer/${token}/decline`,
+          portalUrl:      `${APP_URL}/agent/${agent.agent_token}`,
         }),
       }).catch(() => {});
 
@@ -83,53 +82,6 @@ router.get('/', requireWriter, async (req, res) => {
     query += ' ORDER BY so.sent_at DESC';
     res.json(await db.all(query, params));
   } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// ── Réponse publique (accept / decline) via token ──────────────────────────────
-// GET /api/shift-offers/:token/accept  ou  /decline
-router.get('/:token/:action', async (req, res) => {
-  const { token, action } = req.params;
-  if (!['accept', 'decline'].includes(action)) return res.status(400).json({ error: 'Action invalide' });
-
-  try {
-    const offer = await db.get(`
-      SELECT so.*, sh.date, sh.start_time, sh.end_time, sh.site_id, sh.company_id,
-             s.name as site_name, a.first_name, a.last_name, c.name as company_name
-      FROM shift_offers so
-      JOIN shifts sh ON so.shift_id = sh.id
-      JOIN sites s ON sh.site_id = s.id
-      JOIN agents a ON so.agent_id = a.id
-      JOIN companies c ON so.company_id = c.id
-      WHERE so.token = ?
-    `, [token]);
-
-    if (!offer) return res.redirect(`${APP_URL}/offer/invalid`);
-    if (offer.status !== 'pending') {
-      return res.redirect(`${APP_URL}/offer/${token}/already`);
-    }
-
-    const newStatus = action === 'accept' ? 'accepted' : 'declined';
-
-    await db.run(
-      'UPDATE shift_offers SET status = ?, responded_at = NOW() WHERE token = ?',
-      [newStatus, token]
-    );
-
-    if (action === 'accept') {
-      // Assigner le shift à cet agent
-      await db.run('UPDATE shifts SET agent_id = ? WHERE id = ?', [offer.agent_id, offer.shift_id]);
-      // Décliner automatiquement toutes les autres offres en attente pour ce shift
-      await db.run(
-        "UPDATE shift_offers SET status = 'auto_declined', responded_at = NOW() WHERE shift_id = ? AND token != ? AND status = 'pending'",
-        [offer.shift_id, token]
-      );
-    }
-
-    res.redirect(`${APP_URL}/offer/${token}/done?action=${action}`);
-  } catch (e) {
-    console.error(e);
-    res.redirect(`${APP_URL}/offer/error`);
-  }
 });
 
 // ── Annuler une offre ──────────────────────────────────────────────────────────

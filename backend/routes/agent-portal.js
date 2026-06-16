@@ -54,6 +54,18 @@ router.get('/:token', async (req, res) => {
       [agent.id, today, end]
     );
 
+    const offers = await db.all(
+      `SELECT so.id, so.status, so.sent_at,
+              sh.date, sh.start_time, sh.end_time, sh.notes,
+              s.name AS site_name, s.address AS site_address
+       FROM shift_offers so
+       JOIN shifts sh ON sh.id = so.shift_id
+       JOIN sites  s  ON s.id  = sh.site_id
+       WHERE so.agent_id = ? AND so.status = 'pending'
+       ORDER BY so.sent_at DESC`,
+      [agent.id]
+    );
+
     res.json({
       agent: {
         id: agent.id,
@@ -62,8 +74,43 @@ router.get('/:token', async (req, res) => {
         company_name: agent.company_name,
       },
       shifts,
+      offers,
       today,
     });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/agent-portal/:token/offers/:offerId/accept|decline ─────────────
+router.post('/:token/offers/:offerId/:action', async (req, res) => {
+  const { action } = req.params;
+  if (!['accept', 'decline'].includes(action)) return res.status(400).json({ error: 'Action invalide' });
+  try {
+    const agent = await resolveAgent(req.params.token);
+    if (!agent) return res.status(404).json({ error: 'Lien invalide' });
+
+    const offer = await db.get(
+      `SELECT so.*, sh.site_id, sh.date, sh.start_time, sh.end_time, sh.notes
+       FROM shift_offers so JOIN shifts sh ON sh.id = so.shift_id
+       WHERE so.id = ? AND so.agent_id = ?`,
+      [req.params.offerId, agent.id]
+    );
+    if (!offer) return res.status(404).json({ error: 'Offre non trouvée' });
+    if (offer.status !== 'pending') return res.status(409).json({ error: 'Vous avez déjà répondu à cette offre' });
+
+    await db.run(
+      'UPDATE shift_offers SET status = ?, responded_at = NOW() WHERE id = ?',
+      [action === 'accept' ? 'accepted' : 'declined', offer.id]
+    );
+
+    if (action === 'accept') {
+      await db.run('UPDATE shifts SET agent_id = ? WHERE id = ?', [agent.id, offer.shift_id]);
+      await db.run(
+        "UPDATE shift_offers SET status = 'auto_declined', responded_at = NOW() WHERE shift_id = ? AND id != ? AND status = 'pending'",
+        [offer.shift_id, offer.id]
+      );
+    }
+
+    res.json({ success: true, action });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

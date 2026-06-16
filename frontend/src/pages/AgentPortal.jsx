@@ -351,6 +351,85 @@ function InstallBanner() {
   return null;
 }
 
+// ── Carte d'offre de vacation ─────────────────────────────────────────────────
+function OfferCard({ offer, token, onResponded }) {
+  const [loading, setLoading] = useState(null); // 'accept' | 'decline' | null
+  const [done, setDone]       = useState(null);  // 'accepted' | 'declined'
+  const [error, setError]     = useState('');
+
+  async function respond(action) {
+    setLoading(action);
+    setError('');
+    try {
+      const res = await fetch(`${API_BASE}/agent-portal/${token}/offers/${offer.id}/${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Erreur');
+      setDone(action === 'accept' ? 'accepted' : 'declined');
+      setTimeout(() => onResponded(), 1200);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 overflow-hidden">
+      <div className="p-4 space-y-3">
+        <div className="flex items-start gap-3">
+          <div className="w-1 self-stretch rounded-full bg-amber-400 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-white text-sm">{offer.site_name}</div>
+            <div className="flex items-center gap-3 text-xs text-slate-400 mt-0.5">
+              <span className="flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                {formatTime(offer.start_time)} – {formatTime(offer.end_time)}
+              </span>
+              <span className="text-slate-600">·</span>
+              <span>{shiftDuration(offer.start_time, offer.end_time)}</span>
+            </div>
+            <div className="text-xs text-amber-300/70 mt-1 capitalize">
+              {dayLabel(offer.date)}
+            </div>
+          </div>
+        </div>
+
+        {done ? (
+          <div className={`rounded-xl px-4 py-3 text-center text-sm font-semibold ${
+            done === 'accepted'
+              ? 'bg-emerald-500/20 text-emerald-300'
+              : 'bg-red-500/20 text-red-300'
+          }`}>
+            {done === 'accepted' ? '✅ Vacation acceptée !' : '❌ Vacation déclinée'}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => respond('decline')}
+              disabled={!!loading}
+              className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-500/20 border border-red-500/40 text-red-300 text-sm font-semibold active:scale-95 transition-all disabled:opacity-50"
+            >
+              {loading === 'decline' ? <Loader2 className="w-4 h-4 animate-spin" /> : '❌'} Décliner
+            </button>
+            <button
+              onClick={() => respond('accept')}
+              disabled={!!loading}
+              className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-sm font-semibold active:scale-95 transition-all disabled:opacity-50"
+            >
+              {loading === 'accept' ? <Loader2 className="w-4 h-4 animate-spin" /> : '✅'} Accepter
+            </button>
+          </div>
+        )}
+
+        {error && <p className="text-xs text-red-400 text-center">{error}</p>}
+      </div>
+    </div>
+  );
+}
+
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function AgentPortal() {
   const { token } = useParams();
@@ -393,7 +472,7 @@ export default function AgentPortal() {
     );
   }
 
-  const { agent, shifts, today } = data;
+  const { agent, shifts, offers = [], today } = data;
 
   // Grouper par date
   const grouped = {};
@@ -425,6 +504,21 @@ export default function AgentPortal() {
       <NotifButton token={token} />
 
       <main className="max-w-lg mx-auto px-4 py-5 space-y-6">
+
+        {/* Demandes en attente */}
+        {offers.length > 0 && (
+          <section className="space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+              <h2 className="text-sm font-semibold text-amber-300 uppercase tracking-wide">
+                Demande{offers.length > 1 ? 's' : ''} en attente
+              </h2>
+            </div>
+            {offers.map(offer => (
+              <OfferCard key={offer.id} offer={offer} token={token} onResponded={load} />
+            ))}
+          </section>
+        )}
 
         {/* Aujourd'hui */}
         {hasToday ? (
