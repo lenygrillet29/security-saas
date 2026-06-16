@@ -227,9 +227,22 @@ async function init() {
     ALTER TABLE shifts ADD COLUMN IF NOT EXISTS checkin_distance INTEGER;
   `);
 
-  // ── Heures fériées ────────────────────────────────────────────────────────────
+  // ── Heures fériées + ventilation complète 8 catégories ───────────────────────
   await pool.query(`
-    ALTER TABLE shifts ADD COLUMN IF NOT EXISTS hours_holiday REAL DEFAULT 0;
+    ALTER TABLE shifts ADD COLUMN IF NOT EXISTS hours_holiday              REAL DEFAULT 0;
+    ALTER TABLE shifts ADD COLUMN IF NOT EXISTS hours_sunday_night         REAL DEFAULT 0;
+    ALTER TABLE shifts ADD COLUMN IF NOT EXISTS hours_holiday_night        REAL DEFAULT 0;
+    ALTER TABLE shifts ADD COLUMN IF NOT EXISTS hours_holiday_sunday_day   REAL DEFAULT 0;
+    ALTER TABLE shifts ADD COLUMN IF NOT EXISTS hours_holiday_sunday_night REAL DEFAULT 0;
+  `);
+
+  // ── Taux horaires sites : 8 catégories ────────────────────────────────────────
+  await pool.query(`
+    ALTER TABLE sites ADD COLUMN IF NOT EXISTS hourly_rate_sunday_night         REAL DEFAULT 0;
+    ALTER TABLE sites ADD COLUMN IF NOT EXISTS hourly_rate_holiday_day          REAL DEFAULT 0;
+    ALTER TABLE sites ADD COLUMN IF NOT EXISTS hourly_rate_holiday_night        REAL DEFAULT 0;
+    ALTER TABLE sites ADD COLUMN IF NOT EXISTS hourly_rate_holiday_sunday_day   REAL DEFAULT 0;
+    ALTER TABLE sites ADD COLUMN IF NOT EXISTS hourly_rate_holiday_sunday_night REAL DEFAULT 0;
   `);
 
   // ── Journal d'audit ───────────────────────────────────────────────────────────

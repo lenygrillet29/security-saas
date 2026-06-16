@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Save, Settings as SettingsIcon, Mail, Building2, Sun, Moon, Download } from 'lucide-react';
+import { Save, Settings as SettingsIcon, Mail, Building2, Sun, Moon, Download, CalendarDays, Star } from 'lucide-react';
 import { settingsApi, exportApi } from '../api';
 import { ToastProvider, useToast } from '../components/Toast';
 
@@ -34,6 +34,11 @@ function SettingsInner() {
     hourly_rate_day: '18',
     hourly_rate_night: '22',
     hourly_rate_sunday: '25',
+    hourly_rate_sunday_night: '25',
+    hourly_rate_holiday_day: '30',
+    hourly_rate_holiday_night: '30',
+    hourly_rate_holiday_sunday_day: '30',
+    hourly_rate_holiday_sunday_night: '30',
   });
   const [loading, setLoading] = useState(false);
 
@@ -99,21 +104,62 @@ function SettingsInner() {
         </Section>
 
         <Section title="Taux horaires par défaut" icon={Sun}>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="label flex items-center gap-1"><Sun className="w-3 h-3 text-yellow-400"/>Jour (€/h)</label>
-              <input type="number" step="0.01" className="input" value={form.hourly_rate_day} onChange={e => set('hourly_rate_day', e.target.value)} />
-              <p className="text-xs text-slate-500 mt-1">06h00 – 21h00</p>
+          {/* Heures normales */}
+          <div>
+            <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Heures normales</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label flex items-center gap-1"><Sun className="w-3 h-3 text-yellow-400"/> Jour (€/h)</label>
+                <input type="number" step="0.01" className="input" value={form.hourly_rate_day} onChange={e => set('hourly_rate_day', e.target.value)} />
+                <p className="text-xs text-slate-500 mt-1">06h00 – 21h00</p>
+              </div>
+              <div>
+                <label className="label flex items-center gap-1"><Moon className="w-3 h-3 text-violet-400"/> Nuit (€/h)</label>
+                <input type="number" step="0.01" className="input" value={form.hourly_rate_night} onChange={e => set('hourly_rate_night', e.target.value)} />
+                <p className="text-xs text-slate-500 mt-1">21h00 – 06h00</p>
+              </div>
             </div>
-            <div>
-              <label className="label flex items-center gap-1"><Moon className="w-3 h-3 text-violet-400"/>Nuit (€/h)</label>
-              <input type="number" step="0.01" className="input" value={form.hourly_rate_night} onChange={e => set('hourly_rate_night', e.target.value)} />
-              <p className="text-xs text-slate-500 mt-1">21h00 – 06h00</p>
+          </div>
+          {/* Dimanche */}
+          <div>
+            <p className="text-xs text-slate-500 uppercase tracking-wide mb-2 flex items-center gap-1"><CalendarDays className="w-3 h-3 text-blue-400"/> Dimanche</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">Dimanche jour (€/h)</label>
+                <input type="number" step="0.01" className="input" value={form.hourly_rate_sunday} onChange={e => set('hourly_rate_sunday', e.target.value)} />
+                <p className="text-xs text-slate-500 mt-1">Dim. 06h00 – 21h00</p>
+              </div>
+              <div>
+                <label className="label">Dimanche nuit (€/h)</label>
+                <input type="number" step="0.01" className="input" value={form.hourly_rate_sunday_night} onChange={e => set('hourly_rate_sunday_night', e.target.value)} />
+                <p className="text-xs text-slate-500 mt-1">Dim. 21h00 – 06h00</p>
+              </div>
             </div>
-            <div>
-              <label className="label">Dimanche (€/h)</label>
-              <input type="number" step="0.01" className="input" value={form.hourly_rate_sunday} onChange={e => set('hourly_rate_sunday', e.target.value)} />
-              <p className="text-xs text-slate-500 mt-1">Toutes heures</p>
+          </div>
+          {/* Jours fériés */}
+          <div>
+            <p className="text-xs text-slate-500 uppercase tracking-wide mb-2 flex items-center gap-1"><Star className="w-3 h-3 text-rose-400"/> Jours fériés</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">Férié jour (€/h)</label>
+                <input type="number" step="0.01" className="input" value={form.hourly_rate_holiday_day} onChange={e => set('hourly_rate_holiday_day', e.target.value)} />
+                <p className="text-xs text-slate-500 mt-1">Férié 06h00 – 21h00</p>
+              </div>
+              <div>
+                <label className="label">Férié nuit (€/h)</label>
+                <input type="number" step="0.01" className="input" value={form.hourly_rate_holiday_night} onChange={e => set('hourly_rate_holiday_night', e.target.value)} />
+                <p className="text-xs text-slate-500 mt-1">Férié 21h00 – 06h00</p>
+              </div>
+              <div>
+                <label className="label">Férié dimanche jour (€/h)</label>
+                <input type="number" step="0.01" className="input" value={form.hourly_rate_holiday_sunday_day} onChange={e => set('hourly_rate_holiday_sunday_day', e.target.value)} />
+                <p className="text-xs text-slate-500 mt-1">Dim. férié 06h00 – 21h00</p>
+              </div>
+              <div>
+                <label className="label">Férié dimanche nuit (€/h)</label>
+                <input type="number" step="0.01" className="input" value={form.hourly_rate_holiday_sunday_night} onChange={e => set('hourly_rate_holiday_sunday_night', e.target.value)} />
+                <p className="text-xs text-slate-500 mt-1">Dim. férié 21h00 – 06h00</p>
+              </div>
             </div>
           </div>
           <div className="w-32">

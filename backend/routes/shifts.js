@@ -73,11 +73,15 @@ router.get('/stats/summary', async (req, res) => {
       SELECT
         agent_id,
         a.first_name, a.last_name,
-        SUM(hours_day) as total_day,
-        SUM(hours_night) as total_night,
-        SUM(hours_sunday) as total_sunday,
-        COALESCE(SUM(hours_holiday), 0) as total_holiday,
-        COUNT(*) as shift_count
+        SUM(hours_day)                                  as total_day,
+        SUM(hours_night)                                as total_night,
+        SUM(hours_sunday)                               as total_sunday,
+        COALESCE(SUM(hours_sunday_night), 0)            as total_sunday_night,
+        COALESCE(SUM(hours_holiday), 0)                 as total_holiday,
+        COALESCE(SUM(hours_holiday_night), 0)           as total_holiday_night,
+        COALESCE(SUM(hours_holiday_sunday_day), 0)      as total_holiday_sunday_day,
+        COALESCE(SUM(hours_holiday_sunday_night), 0)    as total_holiday_sunday_night,
+        COUNT(*)                                        as shift_count
       FROM shifts sh
       JOIN agents a ON sh.agent_id = a.id
       WHERE sh.company_id = ? AND sh.date >= ? AND sh.date <= ?
@@ -100,11 +104,20 @@ router.get('/recap', async (req, res) => {
         a.id as agent_id,
         a.first_name, a.last_name, a.employee_number, a.hourly_rate,
         COUNT(sh.id) as shift_count,
-        ROUND(SUM(sh.hours_day)::numeric, 2)     as total_day,
-        ROUND(SUM(sh.hours_night)::numeric, 2)   as total_night,
-        ROUND(SUM(sh.hours_sunday)::numeric, 2)  as total_sunday,
-        ROUND(COALESCE(SUM(sh.hours_holiday), 0)::numeric, 2) as total_holiday,
-        ROUND(SUM(sh.hours_day + sh.hours_night + sh.hours_sunday + COALESCE(sh.hours_holiday, 0))::numeric, 2) as total_hours
+        ROUND(SUM(sh.hours_day)::numeric, 2)                                      as total_day,
+        ROUND(SUM(sh.hours_night)::numeric, 2)                                    as total_night,
+        ROUND(SUM(sh.hours_sunday)::numeric, 2)                                   as total_sunday,
+        ROUND(COALESCE(SUM(sh.hours_sunday_night), 0)::numeric, 2)               as total_sunday_night,
+        ROUND(SUM(COALESCE(sh.hours_holiday, 0))::numeric, 2)                    as total_holiday,
+        ROUND(COALESCE(SUM(sh.hours_holiday_night), 0)::numeric, 2)              as total_holiday_night,
+        ROUND(COALESCE(SUM(sh.hours_holiday_sunday_day), 0)::numeric, 2)         as total_holiday_sunday_day,
+        ROUND(COALESCE(SUM(sh.hours_holiday_sunday_night), 0)::numeric, 2)       as total_holiday_sunday_night,
+        ROUND(SUM(
+          sh.hours_day + sh.hours_night + sh.hours_sunday +
+          COALESCE(sh.hours_sunday_night, 0) + COALESCE(sh.hours_holiday, 0) +
+          COALESCE(sh.hours_holiday_night, 0) + COALESCE(sh.hours_holiday_sunday_day, 0) +
+          COALESCE(sh.hours_holiday_sunday_night, 0)
+        )::numeric, 2) as total_hours
       FROM shifts sh
       JOIN agents a ON a.id = sh.agent_id
       WHERE sh.company_id = ? AND sh.date >= ? AND sh.date <= ?
@@ -151,10 +164,14 @@ router.post('/', requireWriter, async (req, res) => {
 
     const hours = calculateHours(date, start_time, end_time);
     const result = await db.insert(
-      `INSERT INTO shifts (company_id, agent_id, site_id, date, start_time, end_time, hours_day, hours_night, hours_sunday, hours_holiday, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO shifts (company_id, agent_id, site_id, date, start_time, end_time,
+        hours_day, hours_night, hours_sunday, hours_sunday_night,
+        hours_holiday, hours_holiday_night, hours_holiday_sunday_day, hours_holiday_sunday_night, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [req.user.companyId, agent_id, site_id, date, start_time, end_time,
-        hours.hours_day, hours.hours_night, hours.hours_sunday, hours.hours_holiday, notes || null]
+        hours.hours_day, hours.hours_night, hours.hours_sunday, hours.hours_sunday_night,
+        hours.hours_holiday, hours.hours_holiday_night,
+        hours.hours_holiday_sunday_day, hours.hours_holiday_sunday_night, notes || null]
     );
     res.status(201).json(await db.get(SHIFTS_QUERY + ' WHERE sh.id = ?', [result.lastInsertRowid]));
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -169,9 +186,14 @@ router.put('/:id', requireWriter, async (req, res) => {
     const hours = calculateHours(date, start_time, end_time);
     await db.run(
       `UPDATE shifts SET agent_id=?, site_id=?, date=?, start_time=?, end_time=?,
-       hours_day=?, hours_night=?, hours_sunday=?, hours_holiday=?, notes=? WHERE id=?`,
+       hours_day=?, hours_night=?, hours_sunday=?, hours_sunday_night=?,
+       hours_holiday=?, hours_holiday_night=?, hours_holiday_sunday_day=?, hours_holiday_sunday_night=?,
+       notes=? WHERE id=?`,
       [agent_id, site_id, date, start_time, end_time,
-        hours.hours_day, hours.hours_night, hours.hours_sunday, hours.hours_holiday, notes || null, req.params.id]
+        hours.hours_day, hours.hours_night, hours.hours_sunday, hours.hours_sunday_night,
+        hours.hours_holiday, hours.hours_holiday_night,
+        hours.hours_holiday_sunday_day, hours.hours_holiday_sunday_night,
+        notes || null, req.params.id]
     );
     res.json(await db.get(SHIFTS_QUERY + ' WHERE sh.id = ?', [req.params.id]));
   } catch (e) { res.status(500).json({ error: e.message }); }

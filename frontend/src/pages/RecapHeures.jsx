@@ -19,10 +19,14 @@ function fmtHStr(h) {
 
 // En-têtes des colonnes d'heures majorées
 const COLS = [
-  { key: 'total_day',     label: 'Heures jour',    icon: Sun,         color: 'text-amber-400',   bg: 'bg-amber-500/10' },
-  { key: 'total_night',   label: 'Heures nuit',    icon: Moon,        color: 'text-violet-400',  bg: 'bg-violet-500/10' },
-  { key: 'total_sunday',  label: 'Heures dim.',    icon: CalendarDays,color: 'text-blue-400',    bg: 'bg-blue-500/10' },
-  { key: 'total_holiday', label: 'Heures fériées', icon: Star,        color: 'text-rose-400',    bg: 'bg-rose-500/10' },
+  { key: 'total_day',                  label: 'Jour',           icon: Sun,         color: 'text-amber-400',   bg: 'bg-amber-500/10' },
+  { key: 'total_night',                label: 'Nuit',           icon: Moon,        color: 'text-violet-400',  bg: 'bg-violet-500/10' },
+  { key: 'total_sunday',               label: 'Dim. jour',      icon: CalendarDays,color: 'text-blue-400',    bg: 'bg-blue-500/10' },
+  { key: 'total_sunday_night',         label: 'Dim. nuit',      icon: Moon,        color: 'text-blue-300',    bg: 'bg-blue-500/10' },
+  { key: 'total_holiday',              label: 'Férié jour',     icon: Star,        color: 'text-rose-400',    bg: 'bg-rose-500/10' },
+  { key: 'total_holiday_night',        label: 'Férié nuit',     icon: Star,        color: 'text-rose-300',    bg: 'bg-rose-500/10' },
+  { key: 'total_holiday_sunday_day',   label: 'Fér. dim. jour', icon: Star,        color: 'text-orange-400',  bg: 'bg-orange-500/10' },
+  { key: 'total_holiday_sunday_night', label: 'Fér. dim. nuit', icon: Star,        color: 'text-orange-300',  bg: 'bg-orange-500/10' },
 ];
 
 function monthLabel(year, month) {
@@ -69,7 +73,12 @@ export default function RecapHeures() {
   // Export CSV
   function exportCSV() {
     if (!data?.agents?.length) return;
-    const header = ['Agent', 'N° Employé', 'Vacations', 'H. Jour', 'H. Nuit', 'H. Dimanche', 'H. Fériées', 'Total'].join(';');
+    const header = ['Agent', 'N° Employé', 'Vacations',
+      'H. Jour', 'H. Nuit',
+      'Dim. Jour', 'Dim. Nuit',
+      'Fér. Jour', 'Fér. Nuit',
+      'Fér. Dim. Jour', 'Fér. Dim. Nuit',
+      'Total'].join(';');
     const rows = data.agents.map(a =>
       [
         `${a.last_name} ${a.first_name}`,
@@ -78,7 +87,11 @@ export default function RecapHeures() {
         fmtHStr(a.total_day),
         fmtHStr(a.total_night),
         fmtHStr(a.total_sunday),
+        fmtHStr(a.total_sunday_night),
         fmtHStr(a.total_holiday),
+        fmtHStr(a.total_holiday_night),
+        fmtHStr(a.total_holiday_sunday_day),
+        fmtHStr(a.total_holiday_sunday_night),
         fmtHStr(a.total_hours),
       ].join(';')
     );
@@ -94,13 +107,23 @@ export default function RecapHeures() {
 
   // Totaux globaux
   const totals = data?.agents?.reduce((acc, a) => ({
-    shift_count:   acc.shift_count   + (a.shift_count   || 0),
-    total_day:     acc.total_day     + (parseFloat(a.total_day)     || 0),
-    total_night:   acc.total_night   + (parseFloat(a.total_night)   || 0),
-    total_sunday:  acc.total_sunday  + (parseFloat(a.total_sunday)  || 0),
-    total_holiday: acc.total_holiday + (parseFloat(a.total_holiday) || 0),
-    total_hours:   acc.total_hours   + (parseFloat(a.total_hours)   || 0),
-  }), { shift_count: 0, total_day: 0, total_night: 0, total_sunday: 0, total_holiday: 0, total_hours: 0 });
+    shift_count:                acc.shift_count                + (a.shift_count                || 0),
+    total_day:                  acc.total_day                  + (parseFloat(a.total_day)                  || 0),
+    total_night:                acc.total_night                + (parseFloat(a.total_night)                || 0),
+    total_sunday:               acc.total_sunday               + (parseFloat(a.total_sunday)               || 0),
+    total_sunday_night:         acc.total_sunday_night         + (parseFloat(a.total_sunday_night)         || 0),
+    total_holiday:              acc.total_holiday              + (parseFloat(a.total_holiday)              || 0),
+    total_holiday_night:        acc.total_holiday_night        + (parseFloat(a.total_holiday_night)        || 0),
+    total_holiday_sunday_day:   acc.total_holiday_sunday_day   + (parseFloat(a.total_holiday_sunday_day)   || 0),
+    total_holiday_sunday_night: acc.total_holiday_sunday_night + (parseFloat(a.total_holiday_sunday_night) || 0),
+    total_hours:                acc.total_hours                + (parseFloat(a.total_hours)                || 0),
+  }), {
+    shift_count: 0, total_day: 0, total_night: 0,
+    total_sunday: 0, total_sunday_night: 0,
+    total_holiday: 0, total_holiday_night: 0,
+    total_holiday_sunday_day: 0, total_holiday_sunday_night: 0,
+    total_hours: 0,
+  });
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -133,15 +156,19 @@ export default function RecapHeures() {
       {/* Cartes totaux */}
       {totals && data?.agents?.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {COLS.map(c => (
-            <div key={c.key} className={`${c.bg} border border-dark-700 rounded-xl p-4`}>
-              <div className="flex items-center gap-2 mb-2">
-                <c.icon className={`w-4 h-4 ${c.color}`} />
-                <span className="text-xs text-slate-400">{c.label}</span>
+          {COLS.map(c => {
+            const val = totals[c.key] || 0;
+            if (val === 0) return null; // masquer les catégories vides
+            return (
+              <div key={c.key} className={`${c.bg} border border-dark-700 rounded-xl p-3`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <c.icon className={`w-3.5 h-3.5 ${c.color}`} />
+                  <span className="text-xs text-slate-400">{c.label}</span>
+                </div>
+                <div className={`text-lg font-bold ${c.color}`}>{fmtHStr(val)}</div>
               </div>
-              <div className={`text-xl font-bold ${c.color}`}>{fmtHStr(totals[c.key])}</div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -162,56 +189,80 @@ export default function RecapHeures() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-dark-600 text-xs text-slate-400">
-                  <th className="text-left py-3 px-4 font-medium">Agent</th>
-                  <th className="text-right py-3 px-4 font-medium">Vacations</th>
-                  <th className="text-right py-3 px-4 font-medium">
-                    <span className="flex items-center justify-end gap-1">
-                      <Sun className="w-3 h-3 text-amber-400" /> Jour
-                    </span>
+                  <th className="text-left py-3 px-3 font-medium">Agent</th>
+                  <th className="text-right py-3 px-2 font-medium">Vac.</th>
+                  <th className="text-right py-3 px-2 font-medium">
+                    <span className="flex items-center justify-end gap-1"><Sun className="w-3 h-3 text-amber-400" />Jour</span>
                   </th>
-                  <th className="text-right py-3 px-4 font-medium">
-                    <span className="flex items-center justify-end gap-1">
-                      <Moon className="w-3 h-3 text-violet-400" /> Nuit
-                    </span>
+                  <th className="text-right py-3 px-2 font-medium">
+                    <span className="flex items-center justify-end gap-1"><Moon className="w-3 h-3 text-violet-400" />Nuit</span>
                   </th>
-                  <th className="text-right py-3 px-4 font-medium">
-                    <span className="flex items-center justify-end gap-1">
-                      <CalendarDays className="w-3 h-3 text-blue-400" /> Dim.
-                    </span>
+                  <th className="text-right py-3 px-2 font-medium">
+                    <span className="flex items-center justify-end gap-1"><CalendarDays className="w-3 h-3 text-blue-400" />Dim.J</span>
                   </th>
-                  <th className="text-right py-3 px-4 font-medium">
-                    <span className="flex items-center justify-end gap-1">
-                      <Star className="w-3 h-3 text-rose-400" /> Fériés
-                    </span>
+                  <th className="text-right py-3 px-2 font-medium">
+                    <span className="flex items-center justify-end gap-1"><CalendarDays className="w-3 h-3 text-blue-300" />Dim.N</span>
                   </th>
-                  <th className="text-right py-3 px-4 font-medium text-white">Total</th>
+                  <th className="text-right py-3 px-2 font-medium">
+                    <span className="flex items-center justify-end gap-1"><Star className="w-3 h-3 text-rose-400" />Fér.J</span>
+                  </th>
+                  <th className="text-right py-3 px-2 font-medium">
+                    <span className="flex items-center justify-end gap-1"><Star className="w-3 h-3 text-rose-300" />Fér.N</span>
+                  </th>
+                  <th className="text-right py-3 px-2 font-medium">
+                    <span className="flex items-center justify-end gap-1"><Star className="w-3 h-3 text-orange-400" />F.D.J</span>
+                  </th>
+                  <th className="text-right py-3 px-2 font-medium">
+                    <span className="flex items-center justify-end gap-1"><Star className="w-3 h-3 text-orange-300" />F.D.N</span>
+                  </th>
+                  <th className="text-right py-3 px-3 font-medium text-white">Total</th>
+                </tr>
+                <tr className="text-xs text-slate-600 border-b border-dark-700">
+                  <td colSpan={2}></td>
+                  <td className="text-right px-2 pb-1">06h–21h</td>
+                  <td className="text-right px-2 pb-1">21h–06h</td>
+                  <td className="text-right px-2 pb-1">Dim.06–21</td>
+                  <td className="text-right px-2 pb-1">Dim.21–06</td>
+                  <td className="text-right px-2 pb-1">Fér.06–21</td>
+                  <td className="text-right px-2 pb-1">Fér.21–06</td>
+                  <td className="text-right px-2 pb-1">F+D.06–21</td>
+                  <td className="text-right px-2 pb-1">F+D.21–06</td>
+                  <td></td>
                 </tr>
               </thead>
               <tbody>
                 {data.agents.map((a, i) => (
                   <tr key={a.agent_id} className={`border-b border-dark-700/50 hover:bg-dark-700/30 transition-colors ${i % 2 === 0 ? '' : 'bg-dark-800/30'}`}>
-                    <td className="py-3 px-4">
+                    <td className="py-2.5 px-3">
                       <div className="font-medium text-white text-sm">{a.last_name} {a.first_name}</div>
                       {a.employee_number && <div className="text-xs text-slate-500">{a.employee_number}</div>}
                     </td>
-                    <td className="py-3 px-4 text-right text-slate-400 text-sm">{a.shift_count}</td>
-                    <td className="py-3 px-4 text-right text-sm text-amber-300/80">{fmtH(parseFloat(a.total_day))}</td>
-                    <td className="py-3 px-4 text-right text-sm text-violet-300/80">{fmtH(parseFloat(a.total_night))}</td>
-                    <td className="py-3 px-4 text-right text-sm text-blue-300/80">{fmtH(parseFloat(a.total_sunday))}</td>
-                    <td className="py-3 px-4 text-right text-sm text-rose-300/80">{fmtH(parseFloat(a.total_holiday))}</td>
-                    <td className="py-3 px-4 text-right font-semibold text-white">{fmtHStr(parseFloat(a.total_hours))}</td>
+                    <td className="py-2.5 px-2 text-right text-slate-400 text-sm">{a.shift_count}</td>
+                    <td className="py-2.5 px-2 text-right text-sm text-amber-300/80">{fmtH(parseFloat(a.total_day))}</td>
+                    <td className="py-2.5 px-2 text-right text-sm text-violet-300/80">{fmtH(parseFloat(a.total_night))}</td>
+                    <td className="py-2.5 px-2 text-right text-sm text-blue-300/80">{fmtH(parseFloat(a.total_sunday))}</td>
+                    <td className="py-2.5 px-2 text-right text-sm text-blue-200/70">{fmtH(parseFloat(a.total_sunday_night))}</td>
+                    <td className="py-2.5 px-2 text-right text-sm text-rose-300/80">{fmtH(parseFloat(a.total_holiday))}</td>
+                    <td className="py-2.5 px-2 text-right text-sm text-rose-200/70">{fmtH(parseFloat(a.total_holiday_night))}</td>
+                    <td className="py-2.5 px-2 text-right text-sm text-orange-300/80">{fmtH(parseFloat(a.total_holiday_sunday_day))}</td>
+                    <td className="py-2.5 px-2 text-right text-sm text-orange-200/70">{fmtH(parseFloat(a.total_holiday_sunday_night))}</td>
+                    <td className="py-2.5 px-3 text-right font-semibold text-white">{fmtHStr(parseFloat(a.total_hours))}</td>
                   </tr>
                 ))}
 
                 {/* Ligne totaux */}
                 <tr className="border-t border-dark-500 bg-dark-800/60 font-semibold">
-                  <td className="py-3 px-4 text-slate-300 text-sm">TOTAL</td>
-                  <td className="py-3 px-4 text-right text-slate-300 text-sm">{totals.shift_count}</td>
-                  <td className="py-3 px-4 text-right text-sm text-amber-300">{fmtHStr(totals.total_day)}</td>
-                  <td className="py-3 px-4 text-right text-sm text-violet-300">{fmtHStr(totals.total_night)}</td>
-                  <td className="py-3 px-4 text-right text-sm text-blue-300">{fmtHStr(totals.total_sunday)}</td>
-                  <td className="py-3 px-4 text-right text-sm text-rose-300">{fmtHStr(totals.total_holiday)}</td>
-                  <td className="py-3 px-4 text-right text-white">{fmtHStr(totals.total_hours)}</td>
+                  <td className="py-2.5 px-3 text-slate-300 text-sm">TOTAL</td>
+                  <td className="py-2.5 px-2 text-right text-slate-300 text-sm">{totals.shift_count}</td>
+                  <td className="py-2.5 px-2 text-right text-sm text-amber-300">{fmtHStr(totals.total_day)}</td>
+                  <td className="py-2.5 px-2 text-right text-sm text-violet-300">{fmtHStr(totals.total_night)}</td>
+                  <td className="py-2.5 px-2 text-right text-sm text-blue-300">{fmtHStr(totals.total_sunday)}</td>
+                  <td className="py-2.5 px-2 text-right text-sm text-blue-200">{fmtHStr(totals.total_sunday_night)}</td>
+                  <td className="py-2.5 px-2 text-right text-sm text-rose-300">{fmtHStr(totals.total_holiday)}</td>
+                  <td className="py-2.5 px-2 text-right text-sm text-rose-200">{fmtHStr(totals.total_holiday_night)}</td>
+                  <td className="py-2.5 px-2 text-right text-sm text-orange-300">{fmtHStr(totals.total_holiday_sunday_day)}</td>
+                  <td className="py-2.5 px-2 text-right text-sm text-orange-200">{fmtHStr(totals.total_holiday_sunday_night)}</td>
+                  <td className="py-2.5 px-3 text-right text-white">{fmtHStr(totals.total_hours)}</td>
                 </tr>
               </tbody>
             </table>
@@ -219,9 +270,10 @@ export default function RecapHeures() {
         )}
       </div>
 
-      <p className="text-xs text-slate-600">
-        Nuit : 21h–6h · Dimanche : 00h–24h · Fériés : jours fériés légaux français (priorité sur dimanche)
-      </p>
+      <div className="text-xs text-slate-600 space-y-0.5">
+        <p><span className="text-amber-400/60">Jour</span> 06h–21h &nbsp;·&nbsp; <span className="text-violet-400/60">Nuit</span> 21h–06h &nbsp;·&nbsp; <span className="text-blue-400/60">Dim.J / Dim.N</span> dimanche jour/nuit &nbsp;·&nbsp; <span className="text-rose-400/60">Fér.J / Fér.N</span> férié jour/nuit &nbsp;·&nbsp; <span className="text-orange-400/60">F.D.J / F.D.N</span> férié + dimanche jour/nuit</p>
+        <p>11 jours fériés légaux français inclus (Pâques mobile, Ascension, Pentecôte…)</p>
+      </div>
     </div>
   );
 }

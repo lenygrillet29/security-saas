@@ -1,13 +1,17 @@
 /**
- * Calcule les heures jour, nuit, dimanche et fériées pour un shift.
+ * Calcule les 8 catégories d'heures majorées pour un shift.
  *
  * Règles France :
- *   - Heures jour    : 06:00 – 21:00, hors dimanche et fériés
- *   - Heures nuit    : 21:00 – 06:00, hors dimanche et fériés
- *   - Heures dimanche: toutes les heures tombant un dimanche (hors fériés)
- *   - Heures fériées : toutes les heures tombant un jour férié (priorité sur dimanche)
+ *   - hours_day              : 06h–21h, semaine normale (ni dim, ni férié)
+ *   - hours_night            : 21h–06h, semaine normale (ni dim, ni férié)
+ *   - hours_sunday           : dimanche 06h–21h (pas férié)
+ *   - hours_sunday_night     : dimanche 21h–06h (pas férié)
+ *   - hours_holiday          : jour férié 06h–21h (pas dimanche)
+ *   - hours_holiday_night    : jour férié 21h–06h (pas dimanche)
+ *   - hours_holiday_sunday_day  : jour férié + dimanche, 06h–21h
+ *   - hours_holiday_sunday_night: jour férié + dimanche, 21h–06h
  *
- * Un shift peut chevaucher minuit.
+ * Un shift peut chevaucher minuit — la date est recalculée minute par minute.
  */
 
 // ── Jours fériés France ────────────────────────────────────────────────────────
@@ -71,10 +75,14 @@ function calculateHours(date, startTime, endTime) {
 
   const baseDate = new Date(date + 'T00:00:00');
 
-  let hoursDay     = 0;
-  let hoursNight   = 0;
-  let hoursSunday  = 0;
-  let hoursHoliday = 0;
+  let hoursDay                = 0;
+  let hoursNight              = 0;
+  let hoursSunday             = 0;
+  let hoursSundayNight        = 0;
+  let hoursHoliday            = 0;
+  let hoursHolidayNight       = 0;
+  let hoursHolidaySundayDay   = 0;
+  let hoursHolidaySundayNight = 0;
 
   for (let m = startMinutes; m < endMinutes; m++) {
     const minuteOfDay = m % (24 * 60);
@@ -84,36 +92,43 @@ function calculateHours(date, startTime, endTime) {
     currentDate.setDate(currentDate.getDate() + dayOffset);
 
     const yy  = currentDate.getFullYear();
-    const mm  = String(currentDate.getMonth() + 1).padStart(2, '0');
+    const mo  = String(currentDate.getMonth() + 1).padStart(2, '0');
     const dd  = String(currentDate.getDate()).padStart(2, '0');
-    const dateStr = `${yy}-${mm}-${dd}`;
+    const dateStr = `${yy}-${mo}-${dd}`;
     const dow     = currentDate.getDay(); // 0 = dimanche
 
-    if (isHoliday(dateStr)) {
-      // Férié — prioritaire sur tout le reste
-      hoursHoliday += 1 / 60;
-    } else if (dow === 0) {
-      // Dimanche (non férié)
-      hoursSunday += 1 / 60;
+    const isSun  = dow === 0;
+    const isFer  = isHoliday(dateStr);
+    const hourOfDay = minuteOfDay / 60;
+    const isNight = hourOfDay >= 21 || hourOfDay < 6;
+
+    if (isFer && isSun) {
+      if (isNight) hoursHolidaySundayNight += 1 / 60;
+      else         hoursHolidaySundayDay   += 1 / 60;
+    } else if (isFer) {
+      if (isNight) hoursHolidayNight += 1 / 60;
+      else         hoursHoliday      += 1 / 60;
+    } else if (isSun) {
+      if (isNight) hoursSundayNight += 1 / 60;
+      else         hoursSunday      += 1 / 60;
     } else {
-      // Jour normal : jour ou nuit
-      const hourOfDay = minuteOfDay / 60;
-      if (hourOfDay >= 6 && hourOfDay < 21) {
-        hoursDay += 1 / 60;
-      } else {
-        hoursNight += 1 / 60;
-      }
+      if (isNight) hoursNight += 1 / 60;
+      else         hoursDay   += 1 / 60;
     }
   }
 
   const round = (v) => Math.round(v * 100) / 100;
 
   return {
-    total:         round((endMinutes - startMinutes) / 60),
-    hours_day:     round(hoursDay),
-    hours_night:   round(hoursNight),
-    hours_sunday:  round(hoursSunday),
-    hours_holiday: round(hoursHoliday),
+    total:                      round((endMinutes - startMinutes) / 60),
+    hours_day:                  round(hoursDay),
+    hours_night:                round(hoursNight),
+    hours_sunday:               round(hoursSunday),
+    hours_sunday_night:         round(hoursSundayNight),
+    hours_holiday:              round(hoursHoliday),
+    hours_holiday_night:        round(hoursHolidayNight),
+    hours_holiday_sunday_day:   round(hoursHolidaySundayDay),
+    hours_holiday_sunday_night: round(hoursHolidaySundayNight),
   };
 }
 
