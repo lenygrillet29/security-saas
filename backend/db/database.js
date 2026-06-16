@@ -334,6 +334,18 @@ async function init() {
     ALTER TABLE agents ADD COLUMN IF NOT EXISTS agent_token TEXT UNIQUE;
   `);
 
+  // ── Données RH complémentaires agents ────────────────────────────────────────
+  await pool.query(`
+    ALTER TABLE agents ADD COLUMN IF NOT EXISTS address       TEXT;
+    ALTER TABLE agents ADD COLUMN IF NOT EXISTS birth_date    TEXT;
+    ALTER TABLE agents ADD COLUMN IF NOT EXISTS birth_place   TEXT;
+    ALTER TABLE agents ADD COLUMN IF NOT EXISTS nationality   TEXT;
+    ALTER TABLE agents ADD COLUMN IF NOT EXISTS carte_vitale  TEXT;
+    ALTER TABLE agents ADD COLUMN IF NOT EXISTS carte_pro     TEXT;
+    ALTER TABLE agents ADD COLUMN IF NOT EXISTS entry_date    TEXT;
+    ALTER TABLE agents ADD COLUMN IF NOT EXISTS exit_date     TEXT;
+  `);
+
   // ── Abonnements notifications push agents ────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS agent_push_subscriptions (

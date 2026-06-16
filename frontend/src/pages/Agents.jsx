@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, Phone, Mail, Search, Download, Archive, ArchiveRestore, Send, AlertTriangle, Zap, Smartphone } from 'lucide-react';
+import { Plus, Edit2, Trash2, Phone, Mail, Search, Download, Archive, ArchiveRestore, Send, AlertTriangle, Zap, Smartphone, User, MapPin, CreditCard, Shield, CalendarDays, ChevronDown, ChevronUp } from 'lucide-react';
 import { agentsApi, shiftsApi, pdfApi, emailApi, addonsApi } from '../api';
 import { useNavigate } from 'react-router-dom';
 import Modal from '../components/Modal';
@@ -10,19 +10,45 @@ import { format, startOfMonth, endOfMonth } from 'date-fns';
 const CONTRACT_TYPES = ['CDI', 'CDD', 'Intérim', 'Auto-entrepreneur'];
 const COLORS = ['#3B82F6','#10B981','#F59E0B','#EF4444','#8B5CF6','#06B6D4','#F97316','#EC4899'];
 
+function FormSection({ icon: Icon, title, color = 'text-blue-400', children, collapsible = false, defaultOpen = true }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="border border-dark-600 rounded-xl overflow-hidden">
+      <button
+        type="button"
+        onClick={() => collapsible && setOpen(o => !o)}
+        className={`w-full flex items-center gap-2 px-4 py-3 bg-dark-700/50 text-left ${collapsible ? 'hover:bg-dark-700 cursor-pointer' : 'cursor-default'}`}
+      >
+        <Icon className={`w-4 h-4 ${color} shrink-0`} />
+        <span className="text-sm font-semibold text-white flex-1">{title}</span>
+        {collapsible && (open ? <ChevronUp className="w-3.5 h-3.5 text-slate-500" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-500" />)}
+      </button>
+      {open && <div className="px-4 py-4 space-y-4">{children}</div>}
+    </div>
+  );
+}
+
 function AgentForm({ agent, onSave, onClose }) {
   const toast = useToast();
   const [form, setForm] = useState({
-    first_name: agent?.first_name || '',
-    last_name: agent?.last_name || '',
-    email: agent?.email || '',
-    phone: agent?.phone || '',
+    first_name:      agent?.first_name      || '',
+    last_name:       agent?.last_name       || '',
+    email:           agent?.email           || '',
+    phone:           agent?.phone           || '',
+    address:         agent?.address         || '',
+    birth_date:      agent?.birth_date      || '',
+    birth_place:     agent?.birth_place     || '',
+    nationality:     agent?.nationality     || '',
     employee_number: agent?.employee_number || '',
-    contract_type: agent?.contract_type || 'CDI',
-    hourly_rate: agent?.hourly_rate || '',
-    color: agent?.color || '#3B82F6',
-    notes: agent?.notes || '',
-    active: agent?.active !== undefined ? agent.active : 1,
+    contract_type:   agent?.contract_type   || 'CDI',
+    hourly_rate:     agent?.hourly_rate     || '',
+    entry_date:      agent?.entry_date      || '',
+    exit_date:       agent?.exit_date       || '',
+    carte_vitale:    agent?.carte_vitale    || '',
+    carte_pro:       agent?.carte_pro       || '',
+    color:           agent?.color           || '#3B82F6',
+    notes:           agent?.notes           || '',
+    active:          agent?.active !== undefined ? agent.active : 1,
   });
 
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
@@ -44,66 +70,128 @@ function AgentForm({ agent, onSave, onClose }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="label">Prénom *</label>
-          <input className="input" value={form.first_name} onChange={e => set('first_name', e.target.value)} required />
+    <form onSubmit={handleSubmit} className="space-y-3">
+
+      {/* Identité */}
+      <FormSection icon={User} title="Identité" color="text-blue-400">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="label">Prénom *</label>
+            <input className="input" value={form.first_name} onChange={e => set('first_name', e.target.value)} required />
+          </div>
+          <div>
+            <label className="label">Nom *</label>
+            <input className="input" value={form.last_name} onChange={e => set('last_name', e.target.value)} required />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="label">Date de naissance</label>
+            <input type="date" className="input" value={form.birth_date} onChange={e => set('birth_date', e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Lieu de naissance</label>
+            <input className="input" value={form.birth_place} onChange={e => set('birth_place', e.target.value)} placeholder="Ville, Pays" />
+          </div>
         </div>
         <div>
-          <label className="label">Nom *</label>
-          <input className="input" value={form.last_name} onChange={e => set('last_name', e.target.value)} required />
+          <label className="label">Nationalité</label>
+          <input className="input" value={form.nationality} onChange={e => set('nationality', e.target.value)} placeholder="Française" />
         </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="label">Email *</label>
-          <input type="email" className="input" value={form.email} onChange={e => set('email', e.target.value)} required />
-        </div>
-        <div>
-          <label className="label">Téléphone</label>
-          <input className="input" value={form.phone} onChange={e => set('phone', e.target.value)} />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="label">N° matricule</label>
-          <input className="input" value={form.employee_number} onChange={e => set('employee_number', e.target.value)} />
+      </FormSection>
+
+      {/* Coordonnées */}
+      <FormSection icon={MapPin} title="Coordonnées" color="text-emerald-400">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="label">Email *</label>
+            <input type="email" className="input" value={form.email} onChange={e => set('email', e.target.value)} required />
+          </div>
+          <div>
+            <label className="label">Téléphone</label>
+            <input className="input" value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="06 XX XX XX XX" />
+          </div>
         </div>
         <div>
-          <label className="label">Type de contrat</label>
-          <select className="input" value={form.contract_type} onChange={e => set('contract_type', e.target.value)}>
-            {CONTRACT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
+          <label className="label">Adresse</label>
+          <input className="input" value={form.address} onChange={e => set('address', e.target.value)} placeholder="N° rue, code postal, ville" />
         </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="label">Taux horaire (€)</label>
-          <input type="number" step="0.01" className="input" value={form.hourly_rate} onChange={e => set('hourly_rate', e.target.value)} />
+      </FormSection>
+
+      {/* Contrat */}
+      <FormSection icon={CalendarDays} title="Contrat & Emploi" color="text-amber-400">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="label">N° matricule</label>
+            <input className="input" value={form.employee_number} onChange={e => set('employee_number', e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Type de contrat</label>
+            <select className="input" value={form.contract_type} onChange={e => set('contract_type', e.target.value)}>
+              {CONTRACT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
         </div>
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <label className="label">Taux horaire (€/h)</label>
+            <input type="number" step="0.01" className="input" value={form.hourly_rate} onChange={e => set('hourly_rate', e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Date d'entrée</label>
+            <input type="date" className="input" value={form.entry_date} onChange={e => set('entry_date', e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Date de sortie</label>
+            <input type="date" className="input" value={form.exit_date} onChange={e => set('exit_date', e.target.value)} />
+          </div>
+        </div>
+      </FormSection>
+
+      {/* Identifiants pro */}
+      <FormSection icon={Shield} title="Identifiants professionnels" color="text-rose-400" collapsible defaultOpen={!!(agent?.carte_vitale || agent?.carte_pro)}>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="label flex items-center gap-1.5">
+              <CreditCard className="w-3.5 h-3.5 text-slate-400" /> N° Carte Vitale
+            </label>
+            <input className="input" value={form.carte_vitale} onChange={e => set('carte_vitale', e.target.value)} placeholder="1 XX XX XX XXX XXX XX" maxLength={21} />
+          </div>
+          <div>
+            <label className="label flex items-center gap-1.5">
+              <Shield className="w-3.5 h-3.5 text-rose-400" /> N° Carte professionnelle CNAPS
+            </label>
+            <input className="input" value={form.carte_pro} onChange={e => set('carte_pro', e.target.value)} placeholder="APS-XXXXXXXXX-XXXX-X" />
+          </div>
+        </div>
+        <p className="text-xs text-slate-600">Ces données sont confidentielles et stockées de façon sécurisée.</p>
+      </FormSection>
+
+      {/* Planning & Notes */}
+      <FormSection icon={CalendarDays} title="Planning & Notes" color="text-violet-400" collapsible defaultOpen>
         <div>
           <label className="label">Couleur planning</label>
           <div className="flex gap-2 flex-wrap mt-1">
             {COLORS.map(c => (
               <button key={c} type="button" onClick={() => set('color', c)}
-                className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 ${form.color === c ? 'border-white scale-110' : 'border-transparent'}`}
+                className={`w-7 h-7 rounded-full border-2 transition-transform hover:scale-110 ${form.color === c ? 'border-white scale-110' : 'border-transparent'}`}
                 style={{ backgroundColor: c }} />
             ))}
           </div>
         </div>
-      </div>
-      <div>
-        <label className="label">Notes</label>
-        <textarea className="input" rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} />
-      </div>
-      <div className="flex items-center gap-2">
-        <input type="checkbox" id="active" checked={form.active === 1 || form.active === true}
-          onChange={e => set('active', e.target.checked ? 1 : 0)}
-          className="w-4 h-4 accent-blue-500 rounded" />
-        <label htmlFor="active" className="text-sm text-slate-300">Agent actif</label>
-      </div>
-      <div className="flex justify-end gap-2 pt-2">
+        <div>
+          <label className="label">Notes</label>
+          <textarea className="input" rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} />
+        </div>
+        <div className="flex items-center gap-2">
+          <input type="checkbox" id="active" checked={form.active === 1 || form.active === true}
+            onChange={e => set('active', e.target.checked ? 1 : 0)}
+            className="w-4 h-4 accent-blue-500 rounded" />
+          <label htmlFor="active" className="text-sm text-slate-300">Agent actif</label>
+        </div>
+      </FormSection>
+
+      <div className="flex justify-end gap-2 pt-1">
         <button type="button" className="btn-secondary" onClick={onClose}>Annuler</button>
         <button type="submit" className="btn-primary">{agent?.id ? 'Modifier' : 'Créer'}</button>
       </div>
@@ -276,6 +364,8 @@ function AgentsInner() {
                     <td className="py-3 px-3">
                       <span className="badge bg-dark-600 text-slate-300">{agent.contract_type}</span>
                       {agent.hourly_rate > 0 && <div className="text-xs text-slate-500 mt-0.5">{agent.hourly_rate}€/h</div>}
+                      {agent.carte_pro && <div className="text-xs text-rose-400/70 mt-0.5 flex items-center gap-1"><Shield className="w-2.5 h-2.5" />{agent.carte_pro}</div>}
+                      {agent.entry_date && <div className="text-xs text-slate-600 mt-0.5">Entrée : {new Date(agent.entry_date).toLocaleDateString('fr-FR')}</div>}
                     </td>
                     <td className="py-3 px-3 text-right">
                       {totalH > 0 ? (
@@ -347,7 +437,7 @@ function AgentsInner() {
       </div>
 
       {modal && (
-        <Modal title={modal.agent ? 'Modifier l\'agent' : 'Nouvel agent'} onClose={() => setModal(null)} size="lg">
+        <Modal title={modal.agent ? 'Modifier l\'agent' : 'Nouvel agent'} onClose={() => setModal(null)} size="xl">
           <AgentForm agent={modal.agent} onSave={() => { setModal(null); load(); }} onClose={() => setModal(null)} />
         </Modal>
       )}
