@@ -2,202 +2,380 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   Shield, MapPin, Clock, LogIn, LogOut, CheckCircle,
-  AlertTriangle, Loader2, Calendar, ChevronRight, Info, X,
-  Bell, BellOff, User, Phone, Mail, FileText, Hash,
-  CalendarDays, TrendingUp, ChevronDown,
+  AlertTriangle, Loader2, Calendar, Info, X,
+  Bell, BellOff, User, Phone, Mail, FileText,
+  CalendarDays, TrendingUp, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { format, parseISO, isToday, isTomorrow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
-function formatTime(t) { return t?.slice(0, 5) || ''; }
+function fmt(t) { return t?.slice(0, 5) || ''; }
 
-function shiftDuration(start, end) {
+function duration(start, end) {
   const [sh, sm] = start.split(':').map(Number);
   const [eh, em] = end.split(':').map(Number);
   let m = (eh * 60 + em) - (sh * 60 + sm);
-  if (m < 0) m += 24 * 60;
-  const h = Math.floor(m / 60);
-  const mn = m % 60;
-  return mn > 0 ? `${h}h${String(mn).padStart(2, '0')}` : `${h}h`;
+  if (m < 0) m += 1440;
+  const h = Math.floor(m / 60), mn = m % 60;
+  return mn ? `${h}h${String(mn).padStart(2,'0')}` : `${h}h`;
 }
 
 function dayLabel(date) {
   const d = parseISO(date);
-  if (isToday(d)) return "Aujourd'hui";
+  if (isToday(d))    return "Aujourd'hui";
   if (isTomorrow(d)) return 'Demain';
   return format(d, 'EEEE d MMMM', { locale: fr });
 }
 
 function initials(first, last) {
-  return `${(first || '')[0] || ''}${(last || '')[0] || ''}`.toUpperCase();
+  return `${(first||'')[0]||''}${(last||'')[0]||''}`.toUpperCase();
 }
 
-// ── Bouton check-in / check-out ───────────────────────────────────────────────
-function CheckButton({ shift, token, onUpdated }) {
+// ── Geolocalisation ───────────────────────────────────────────────────────────
+function getCoords() {
+  return new Promise(resolve => {
+    if (!navigator.geolocation) return resolve({});
+    navigator.geolocation.getCurrentPosition(
+      p => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
+      () => resolve({}),
+      { timeout: 8000, enableHighAccuracy: true }
+    );
+  });
+}
+
+// ── Carte vacation du jour ────────────────────────────────────────────────────
+function TodayShiftCard({ shift, token, onUpdated }) {
   const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState('');
+  const [err, setErr] = useState('');
+  const done = shift.checkin_at && shift.checkout_at;
 
-  async function getCoords() {
-    return new Promise((resolve) => {
-      if (!navigator.geolocation) return resolve({});
-      navigator.geolocation.getCurrentPosition(
-        p => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
-        () => resolve({}),
-        { timeout: 8000, enableHighAccuracy: true }
-      );
-    });
-  }
-
-  async function handle() {
-    setLoading(true);
-    setError('');
+  async function punch() {
+    setLoading(true); setErr('');
     try {
       const coords = await getCoords();
       const action = shift.checkin_at ? 'checkout' : 'checkin';
-      const res = await fetch(`${API_BASE}/agent-portal/${token}/${action}/${shift.id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const r = await fetch(`${API_BASE}/agent-portal/${token}/${action}/${shift.id}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(coords),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Erreur');
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'Erreur');
       onUpdated();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const done = shift.checkin_at && shift.checkout_at;
-  if (done) {
-    return (
-      <div className="flex items-center gap-2 text-emerald-400 text-sm font-medium">
-        <CheckCircle className="w-4 h-4" />
-        Shift terminé
-      </div>
-    );
+    } catch (e) { setErr(e.message); }
+    finally { setLoading(false); }
   }
 
   return (
-    <div className="space-y-1">
-      <button
-        onClick={handle}
-        disabled={loading}
-        className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-all active:scale-95 disabled:opacity-60 ${
-          shift.checkin_at
-            ? 'bg-orange-500 hover:bg-orange-400 text-white'
-            : 'bg-blue-600 hover:bg-blue-500 text-white'
-        }`}
-      >
-        {loading ? (
-          <Loader2 className="w-4 h-4 animate-spin" />
-        ) : shift.checkin_at ? (
-          <><LogOut className="w-4 h-4" /> Pointer la sortie</>
-        ) : (
-          <><LogIn className="w-4 h-4" /> Pointer l'arrivée</>
+    <div className={`rounded-3xl overflow-hidden ${
+      done ? 'bg-emerald-900/30 border border-emerald-500/30'
+           : shift.checkin_at ? 'bg-orange-900/30 border border-orange-500/30'
+           : 'bg-blue-900/40 border border-blue-500/30'
+    }`}>
+      {/* Bandeau coloré haut */}
+      <div className={`h-1.5 w-full ${done ? 'bg-emerald-500' : shift.checkin_at ? 'bg-orange-400' : 'bg-blue-500'}`} />
+
+      <div className="p-5 space-y-4">
+        {/* Site + horaires */}
+        <div>
+          <div className="text-xl font-bold text-white leading-tight">{shift.site_name}</div>
+          <div className="flex items-center gap-2 mt-2">
+            <span className="text-3xl font-bold text-white">{fmt(shift.start_time)}</span>
+            <span className="text-slate-400 text-lg">–</span>
+            <span className="text-3xl font-bold text-white">{fmt(shift.end_time)}</span>
+            <span className="ml-2 text-sm text-slate-400 bg-slate-800 rounded-full px-3 py-1">
+              {duration(shift.start_time, shift.end_time)}
+            </span>
+          </div>
+        </div>
+
+        {/* Adresse */}
+        {(shift.site_address || shift.site_city) && (
+          <div className="flex items-start gap-2.5 text-slate-300 text-base">
+            <MapPin className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
+            <span>{[shift.site_address, shift.site_city].filter(Boolean).join(', ')}</span>
+          </div>
         )}
-      </button>
-      {error && <p className="text-xs text-red-400 text-center">{error}</p>}
+
+        {/* Instructions site */}
+        {shift.site_instructions && (
+          <div className="flex items-start gap-2.5 bg-blue-950/60 border border-blue-800/40 rounded-2xl p-4">
+            <Info className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
+            <span className="text-blue-100 text-sm">{shift.site_instructions}</span>
+          </div>
+        )}
+
+        {/* Statut pointage */}
+        {shift.checkin_at && (
+          <div className="space-y-1.5 bg-slate-800/60 rounded-2xl p-3">
+            <div className="flex items-center gap-2 text-emerald-400 text-sm font-medium">
+              <LogIn className="w-4 h-4" />
+              Arrivée pointée à {format(new Date(shift.checkin_at), 'HH:mm')}
+              {shift.checkin_distance != null && (
+                <span className="text-slate-500 text-xs">· {shift.checkin_distance}m</span>
+              )}
+            </div>
+            {shift.checkout_at && (
+              <div className="flex items-center gap-2 text-orange-400 text-sm font-medium">
+                <LogOut className="w-4 h-4" />
+                Sortie pointée à {format(new Date(shift.checkout_at), 'HH:mm')}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Bouton pointer */}
+        {!done && (
+          <button
+            onClick={punch}
+            disabled={loading}
+            className={`w-full py-4 rounded-2xl text-lg font-bold flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-60 ${
+              shift.checkin_at
+                ? 'bg-orange-500 text-white'
+                : 'bg-blue-600 text-white'
+            }`}
+          >
+            {loading ? <Loader2 className="w-6 h-6 animate-spin" />
+              : shift.checkin_at
+              ? <><LogOut className="w-6 h-6" /> Pointer la sortie</>
+              : <><LogIn className="w-6 h-6" /> Pointer l'arrivée</>
+            }
+          </button>
+        )}
+
+        {done && (
+          <div className="flex items-center justify-center gap-2 py-3 text-emerald-400 font-semibold">
+            <CheckCircle className="w-5 h-5" /> Vacation terminée
+          </div>
+        )}
+
+        {err && <p className="text-red-400 text-sm text-center">{err}</p>}
+      </div>
     </div>
   );
 }
 
-// ── Carte shift ───────────────────────────────────────────────────────────────
-function ShiftCard({ shift, token, onUpdated, highlight }) {
-  const [open, setOpen] = useState(highlight);
-
-  const statusColor = shift.checkout_at ? 'bg-emerald-500'
-    : shift.checkin_at ? 'bg-orange-400'
-    : highlight ? 'bg-blue-500' : 'bg-slate-600';
+// ── Carte vacation à venir ────────────────────────────────────────────────────
+function UpcomingShiftCard({ shift }) {
+  const [open, setOpen] = useState(false);
 
   return (
-    <div className={`rounded-2xl border overflow-hidden ${
-      highlight ? 'border-blue-500/40 bg-blue-500/5' : 'border-slate-700/50 bg-slate-800/60'
-    }`}>
+    <div className="bg-slate-800/60 border border-slate-700/40 rounded-2xl overflow-hidden">
       <button
-        className="w-full flex items-center gap-3 p-4 text-left"
+        className="w-full flex items-center gap-4 p-4 text-left"
         onClick={() => setOpen(o => !o)}
       >
-        <div className={`w-1 self-stretch rounded-full shrink-0 ${statusColor}`} />
+        <div className="w-1 self-stretch rounded-full bg-slate-600 shrink-0" />
         <div className="flex-1 min-w-0">
-          <div className="font-semibold text-white text-sm truncate">{shift.site_name}</div>
-          <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
-            <Clock className="w-3 h-3" />
-            <span>{formatTime(shift.start_time)} – {formatTime(shift.end_time)}</span>
+          <div className="font-semibold text-white text-base truncate">{shift.site_name}</div>
+          <div className="flex items-center gap-2 text-slate-400 text-sm mt-0.5">
+            <Clock className="w-3.5 h-3.5" />
+            {fmt(shift.start_time)} – {fmt(shift.end_time)}
             <span className="text-slate-600">·</span>
-            <span>{shiftDuration(shift.start_time, shift.end_time)}</span>
+            {duration(shift.start_time, shift.end_time)}
           </div>
         </div>
-        <ChevronDown className={`w-4 h-4 text-slate-500 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+        {open ? <ChevronUp className="w-5 h-5 text-slate-500 shrink-0" />
+               : <ChevronDown className="w-5 h-5 text-slate-500 shrink-0" />}
       </button>
 
       {open && (
-        <div className="px-4 pb-4 space-y-3 border-t border-slate-700/50 pt-3">
+        <div className="px-4 pb-4 space-y-3 border-t border-slate-700/40 pt-3">
           {(shift.site_address || shift.site_city) && (
-            <div className="flex items-start gap-2 text-sm text-slate-400">
-              <MapPin className="w-4 h-4 shrink-0 mt-0.5 text-slate-500" />
-              <span>{[shift.site_address, shift.site_city].filter(Boolean).join(', ')}</span>
+            <div className="flex items-start gap-2 text-slate-300 text-sm">
+              <MapPin className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
+              {[shift.site_address, shift.site_city].filter(Boolean).join(', ')}
             </div>
           )}
           {shift.site_instructions && (
-            <div className="flex items-start gap-2 text-sm text-slate-300 bg-slate-700/40 rounded-xl p-3">
-              <Info className="w-4 h-4 shrink-0 mt-0.5 text-blue-400" />
-              <span>{shift.site_instructions}</span>
+            <div className="flex items-start gap-2 bg-slate-700/40 rounded-xl p-3">
+              <Info className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+              <span className="text-slate-300 text-sm">{shift.site_instructions}</span>
             </div>
           )}
-          {shift.notes && (
-            <div className="text-xs text-slate-500 italic">{shift.notes}</div>
-          )}
-          {shift.checkin_at && (
-            <div className="text-xs space-y-1">
-              <div className="flex items-center gap-1.5 text-emerald-400">
-                <LogIn className="w-3 h-3" />
-                Arrivée à {format(new Date(shift.checkin_at), 'HH:mm')}
-                {shift.checkin_distance != null && (
-                  <span className="text-slate-500 ml-1">· {shift.checkin_distance}m du site</span>
-                )}
-              </div>
-              {shift.checkout_at && (
-                <div className="flex items-center gap-1.5 text-orange-400">
-                  <LogOut className="w-3 h-3" />
-                  Sortie à {format(new Date(shift.checkout_at), 'HH:mm')}
-                </div>
-              )}
-            </div>
-          )}
-          {isToday(parseISO(shift.date)) && (
-            <CheckButton shift={shift} token={token} onUpdated={onUpdated} />
-          )}
+          {shift.notes && <p className="text-slate-500 text-xs italic">{shift.notes}</p>}
         </div>
       )}
     </div>
   );
 }
 
-// ── Notifications push ────────────────────────────────────────────────────────
-function useNotifStatus(token) {
+// ── Onglet Planning ───────────────────────────────────────────────────────────
+function TabPlanning({ shifts, token, today, onUpdated }) {
+  const grouped = {};
+  for (const s of shifts) {
+    if (!grouped[s.date]) grouped[s.date] = [];
+    grouped[s.date].push(s);
+  }
+  const days = Object.entries(grouped).sort(([a],[b]) => a.localeCompare(b));
+  const todayShifts = grouped[today] || [];
+  const future = days.filter(([d]) => d !== today);
+
+  return (
+    <div className="space-y-8">
+      {/* Aujourd'hui */}
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+          <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Aujourd'hui</span>
+        </div>
+        {todayShifts.length > 0 ? (
+          todayShifts.map(s => (
+            <TodayShiftCard key={s.id} shift={s} token={token} onUpdated={onUpdated} />
+          ))
+        ) : (
+          <div className="rounded-3xl bg-slate-800/50 border border-slate-700/40 p-8 text-center">
+            <Calendar className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+            <p className="text-slate-300 font-medium">Pas de vacation aujourd'hui</p>
+          </div>
+        )}
+      </section>
+
+      {/* À venir */}
+      {future.length > 0 && (
+        <section className="space-y-4">
+          <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">À venir</span>
+          <div className="space-y-5">
+            {future.map(([date, dayShifts]) => (
+              <div key={date}>
+                <div className="text-sm font-semibold text-slate-400 capitalize mb-2 px-1">
+                  {dayLabel(date)}
+                </div>
+                <div className="space-y-2">
+                  {dayShifts.map(s => <UpcomingShiftCard key={s.id} shift={s} />)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {days.length === 0 && (
+        <div className="rounded-3xl bg-slate-800/50 border border-slate-700/40 p-10 text-center">
+          <Calendar className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+          <p className="text-slate-300 font-medium">Aucune vacation planifiée</p>
+          <p className="text-slate-500 text-sm mt-1">dans les 30 prochains jours</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Carte offre de vacation ───────────────────────────────────────────────────
+function OfferCard({ offer, token, onResponded }) {
+  const [loading, setLoading] = useState(null);
+  const [done, setDone]       = useState(null);
+  const [err, setErr]         = useState('');
+
+  async function respond(action) {
+    setLoading(action); setErr('');
+    try {
+      const r = await fetch(`${API_BASE}/agent-portal/${token}/offers/${offer.id}/${action}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'Erreur');
+      setDone(action === 'accept' ? 'accepted' : 'declined');
+      setTimeout(() => onResponded(), 1500);
+    } catch (e) { setErr(e.message); }
+    finally { setLoading(null); }
+  }
+
+  return (
+    <div className="rounded-3xl border border-amber-500/30 bg-amber-950/30 overflow-hidden">
+      <div className="h-1 bg-amber-400" />
+      <div className="p-5 space-y-5">
+        <div>
+          <div className="text-xl font-bold text-white">{offer.site_name}</div>
+          <div className="flex items-baseline gap-2 mt-2">
+            <span className="text-2xl font-bold text-amber-300">{fmt(offer.start_time)}</span>
+            <span className="text-slate-400">–</span>
+            <span className="text-2xl font-bold text-amber-300">{fmt(offer.end_time)}</span>
+            <span className="text-sm text-slate-400 bg-slate-800 rounded-full px-3 py-0.5 ml-1">
+              {duration(offer.start_time, offer.end_time)}
+            </span>
+          </div>
+          <div className="text-base text-amber-300/80 font-medium mt-1 capitalize">
+            {dayLabel(offer.date)}
+          </div>
+          {offer.site_address && (
+            <div className="flex items-center gap-2 text-slate-400 text-sm mt-2">
+              <MapPin className="w-4 h-4" />{offer.site_address}
+            </div>
+          )}
+        </div>
+
+        {done ? (
+          <div className={`rounded-2xl py-4 text-center text-base font-bold ${
+            done === 'accepted' ? 'bg-emerald-900/60 text-emerald-300 border border-emerald-500/30'
+                                : 'bg-slate-800 text-slate-400 border border-slate-700'
+          }`}>
+            {done === 'accepted' ? '✅ Vacation acceptée !' : '❌ Vacation déclinée'}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => respond('decline')}
+              disabled={!!loading}
+              className="py-4 rounded-2xl bg-slate-800 border border-slate-700 text-slate-300 text-base font-bold active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {loading === 'decline' ? <Loader2 className="w-5 h-5 animate-spin" /> : '✕'} Décliner
+            </button>
+            <button
+              onClick={() => respond('accept')}
+              disabled={!!loading}
+              className="py-4 rounded-2xl bg-emerald-600 text-white text-base font-bold active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {loading === 'accept' ? <Loader2 className="w-5 h-5 animate-spin" /> : '✓'} Accepter
+            </button>
+          </div>
+        )}
+        {err && <p className="text-red-400 text-sm text-center">{err}</p>}
+      </div>
+    </div>
+  );
+}
+
+// ── Onglet Demandes ───────────────────────────────────────────────────────────
+function TabDemandes({ offers, token, onReload }) {
+  if (offers.length === 0) {
+    return (
+      <div className="rounded-3xl bg-slate-800/50 border border-slate-700/40 p-10 text-center">
+        <CheckCircle className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+        <p className="text-slate-300 font-medium">Aucune demande en attente</p>
+        <p className="text-slate-500 text-sm mt-1">Les propositions de vacation apparaîtront ici</p>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-slate-400 px-1">
+        {offers.length} proposition{offers.length > 1 ? 's' : ''} en attente
+      </p>
+      {offers.map(o => (
+        <OfferCard key={o.id} offer={o} token={token} onResponded={onReload} />
+      ))}
+    </div>
+  );
+}
+
+// ── Notifications hook ────────────────────────────────────────────────────────
+function useNotif(token) {
   const [status, setStatus] = useState('loading');
 
-  function urlBase64ToUint8Array(base64String) {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4);
-    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-    const raw = window.atob(base64);
-    return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+  function b64(s) {
+    const p = '='.repeat((4 - s.length % 4) % 4);
+    const b = (s + p).replace(/-/g,'+').replace(/_/g,'/');
+    return Uint8Array.from([...atob(b)].map(c => c.charCodeAt(0)));
   }
 
   async function subscribe(key) {
     const reg = await navigator.serviceWorker.ready;
-    const existing = await reg.pushManager.getSubscription();
-    const sub = existing || await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(key),
-    });
+    const ex  = await reg.pushManager.getSubscription();
+    const sub = ex || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(key) });
     await fetch(`${API_BASE}/agent-portal/${token}/subscribe`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(sub.toJSON()),
     });
     setStatus('on');
@@ -207,13 +385,12 @@ function useNotifStatus(token) {
     if (!('Notification' in window) || !('serviceWorker' in navigator)) { setStatus('unsupported'); return; }
     setStatus('loading');
     try {
-      const res = await fetch(`${API_BASE}/agent-portal/vapid-public-key`);
-      const { key } = await res.json();
+      const { key } = await fetch(`${API_BASE}/agent-portal/vapid-public-key`).then(r => r.json());
       if (!key) { setStatus('unsupported'); return; }
       if (Notification.permission === 'granted') { await subscribe(key); return; }
-      if (Notification.permission === 'denied') { setStatus('blocked'); return; }
-      const perm = await Notification.requestPermission();
-      if (perm === 'granted') await subscribe(key); else setStatus('blocked');
+      if (Notification.permission === 'denied')  { setStatus('blocked'); return; }
+      const p = await Notification.requestPermission();
+      if (p === 'granted') await subscribe(key); else setStatus('blocked');
     } catch { setStatus('idle'); }
   }
 
@@ -231,452 +408,263 @@ function useNotifStatus(token) {
   useEffect(() => {
     if (!('Notification' in window) || !('serviceWorker' in navigator)) { setStatus('unsupported'); return; }
     if (Notification.permission === 'denied') { setStatus('blocked'); return; }
-    navigator.serviceWorker.ready.then(reg =>
-      reg.pushManager.getSubscription().then(sub => setStatus(sub ? 'on' : 'idle'))
-    ).catch(() => setStatus('idle'));
+    navigator.serviceWorker.ready
+      .then(reg => reg.pushManager.getSubscription())
+      .then(sub => setStatus(sub ? 'on' : 'idle'))
+      .catch(() => setStatus('idle'));
   }, []);
 
   return { status, enable, disable };
 }
 
-// ── Bannière d'installation PWA ───────────────────────────────────────────────
-function InstallBanner() {
-  const [installPrompt, setInstallPrompt] = useState(null);
-  const [dismissed, setDismissed]         = useState(() => sessionStorage.getItem('pwa-dismissed') === '1');
-  const [installed, setInstalled]         = useState(false);
+// ── Onglet Profil ─────────────────────────────────────────────────────────────
+function TabProfil({ agent, stats, token }) {
+  const { status, enable, disable } = useNotif(token);
 
+  const contractLabel = {
+    CDI: 'CDI', CDD: 'CDD', Interim: 'Intérim', Vacation: 'Vacation',
+  }[agent.contract_type] || agent.contract_type;
+
+  return (
+    <div className="space-y-5">
+      {/* Carte identité */}
+      <div className="rounded-3xl bg-slate-800/60 border border-slate-700/40 p-6">
+        <div className="flex items-center gap-4">
+          <div
+            className="w-20 h-20 rounded-2xl flex items-center justify-center text-2xl font-bold text-white shrink-0"
+            style={{ backgroundColor: agent.color || '#3B82F6' }}
+          >
+            {initials(agent.first_name, agent.last_name)}
+          </div>
+          <div>
+            <div className="text-xl font-bold text-white">{agent.first_name} {agent.last_name}</div>
+            <div className="text-slate-400 mt-0.5">{agent.company_name}</div>
+            {contractLabel && (
+              <span className="inline-block mt-2 text-xs font-semibold bg-slate-700 text-slate-300 rounded-full px-3 py-1">
+                {contractLabel}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Stats du mois */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-3xl bg-slate-800/60 border border-slate-700/40 p-5 text-center">
+          <div className="text-4xl font-bold text-white">{stats.shift_count}</div>
+          <div className="text-slate-400 text-sm mt-1">vacations<br />ce mois</div>
+        </div>
+        <div className="rounded-3xl bg-slate-800/60 border border-slate-700/40 p-5 text-center">
+          <div className="text-4xl font-bold text-white">{stats.hours_count}<span className="text-2xl">h</span></div>
+          <div className="text-slate-400 text-sm mt-1">heures<br />ce mois</div>
+        </div>
+      </div>
+
+      {/* Coordonnées */}
+      {(agent.email || agent.phone) && (
+        <div className="rounded-3xl bg-slate-800/60 border border-slate-700/40 overflow-hidden">
+          {agent.phone && (
+            <a href={`tel:${agent.phone}`}
+              className="flex items-center gap-4 p-5 active:bg-slate-700/40 transition-colors">
+              <div className="w-11 h-11 rounded-2xl bg-blue-900/60 flex items-center justify-center shrink-0">
+                <Phone className="w-5 h-5 text-blue-400" />
+              </div>
+              <div>
+                <div className="text-xs text-slate-500 mb-0.5">Téléphone</div>
+                <div className="text-base text-white font-medium">{agent.phone}</div>
+              </div>
+            </a>
+          )}
+          {agent.email && agent.phone && <div className="h-px bg-slate-700/50 mx-5" />}
+          {agent.email && (
+            <a href={`mailto:${agent.email}`}
+              className="flex items-center gap-4 p-5 active:bg-slate-700/40 transition-colors">
+              <div className="w-11 h-11 rounded-2xl bg-purple-900/60 flex items-center justify-center shrink-0">
+                <Mail className="w-5 h-5 text-purple-400" />
+              </div>
+              <div>
+                <div className="text-xs text-slate-500 mb-0.5">Email</div>
+                <div className="text-base text-white font-medium">{agent.email}</div>
+              </div>
+            </a>
+          )}
+        </div>
+      )}
+
+      {/* Infos contrat */}
+      {(agent.carte_pro || agent.entry_date) && (
+        <div className="rounded-3xl bg-slate-800/60 border border-slate-700/40 overflow-hidden">
+          {agent.carte_pro && (
+            <div className="flex items-center gap-4 p-5">
+              <div className="w-11 h-11 rounded-2xl bg-emerald-900/60 flex items-center justify-center shrink-0">
+                <Shield className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <div className="text-xs text-slate-500 mb-0.5">Carte professionnelle</div>
+                <div className="text-base text-white font-mono font-medium">{agent.carte_pro}</div>
+              </div>
+            </div>
+          )}
+          {agent.carte_pro && agent.entry_date && <div className="h-px bg-slate-700/50 mx-5" />}
+          {agent.entry_date && (
+            <div className="flex items-center gap-4 p-5">
+              <div className="w-11 h-11 rounded-2xl bg-slate-700 flex items-center justify-center shrink-0">
+                <CalendarDays className="w-5 h-5 text-slate-400" />
+              </div>
+              <div>
+                <div className="text-xs text-slate-500 mb-0.5">Date d'entrée</div>
+                <div className="text-base text-white font-medium capitalize">
+                  {format(new Date(agent.entry_date), 'd MMMM yyyy', { locale: fr })}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Notifications */}
+      <div className="rounded-3xl bg-slate-800/60 border border-slate-700/40 p-5">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
+              status === 'on' ? 'bg-blue-900/60' : 'bg-slate-700'
+            }`}>
+              {status === 'on'
+                ? <Bell className="w-5 h-5 text-blue-400" />
+                : <BellOff className="w-5 h-5 text-slate-500" />}
+            </div>
+            <div>
+              <div className="text-base text-white font-medium">Rappels de vacation</div>
+              <div className="text-xs text-slate-400 mt-0.5">
+                {status === 'on'      ? '24h et 2h avant chaque vacation'
+                 : status === 'blocked' ? 'Bloqué — voir réglages navigateur'
+                 : status === 'unsupported' ? 'Non disponible sur ce navigateur'
+                 : 'Désactivés'}
+              </div>
+            </div>
+          </div>
+
+          {status !== 'unsupported' && status !== 'blocked' && (
+            <button
+              onClick={status === 'on' ? disable : enable}
+              disabled={status === 'loading'}
+              className={`relative w-14 h-8 rounded-full transition-colors shrink-0 disabled:opacity-50 ${
+                status === 'on' ? 'bg-blue-600' : 'bg-slate-600'
+              }`}
+            >
+              <span className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-transform shadow ${
+                status === 'on' ? 'translate-x-7' : 'translate-x-1'
+              }`} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <p className="text-center text-xs text-slate-600 pb-4">SecuroPlan · {agent.company_name}</p>
+    </div>
+  );
+}
+
+// ── Bannière installation PWA ─────────────────────────────────────────────────
+function InstallBanner() {
+  const [prompt, setPrompt] = useState(null);
+  const [gone, setGone] = useState(() => sessionStorage.getItem('pwa-gone') === '1');
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
 
   useEffect(() => {
-    if (isStandalone) { setInstalled(true); return; }
-    const handler = (e) => { e.preventDefault(); setInstallPrompt(e); };
-    window.addEventListener('beforeinstallprompt', handler);
-    window.addEventListener('appinstalled', () => setInstalled(true));
-    return () => window.removeEventListener('beforeinstallprompt', handler);
+    if (isStandalone) return;
+    const h = e => { e.preventDefault(); setPrompt(e); };
+    window.addEventListener('beforeinstallprompt', h);
+    return () => window.removeEventListener('beforeinstallprompt', h);
   }, []);
 
-  function dismiss() { setDismissed(true); sessionStorage.setItem('pwa-dismissed', '1'); }
+  function dismiss() { setGone(true); sessionStorage.setItem('pwa-gone','1'); }
 
-  async function handleInstall() {
-    if (!installPrompt) return;
-    installPrompt.prompt();
-    const { outcome } = await installPrompt.userChoice;
-    if (outcome === 'accepted') setInstalled(true);
+  async function install() {
+    if (!prompt) return;
+    prompt.prompt();
+    const { outcome } = await prompt.userChoice;
+    if (outcome === 'accepted') setGone(true);
   }
 
-  if (installed || dismissed) return null;
+  if (isStandalone || gone) return null;
 
-  if (installPrompt) return (
-    <div className="mx-4 mt-3 bg-blue-600/15 border border-blue-500/30 rounded-2xl p-4 flex items-center gap-3">
-      <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shrink-0">
-        <Shield className="w-5 h-5 text-white" />
+  if (prompt) return (
+    <div className="mx-4 mt-4 bg-blue-950/80 border border-blue-600/40 rounded-3xl p-5 flex items-center gap-4">
+      <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center shrink-0">
+        <Shield className="w-6 h-6 text-white" />
       </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-semibold text-white">Installer l'application</div>
-        <div className="text-xs text-slate-400">Accès rapide depuis l'écran d'accueil</div>
+      <div className="flex-1">
+        <div className="font-bold text-white text-base">Installer l'application</div>
+        <div className="text-slate-400 text-sm">Accès rapide depuis l'écran d'accueil</div>
       </div>
-      <button onClick={handleInstall}
-        className="shrink-0 px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg">
-        Installer
-      </button>
-      <button onClick={dismiss} className="text-slate-500"><X className="w-4 h-4" /></button>
+      <div className="flex flex-col items-end gap-2">
+        <button onClick={install} className="px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-xl active:scale-95 transition-all">
+          Installer
+        </button>
+        <button onClick={dismiss} className="text-slate-500 text-xs">Plus tard</button>
+      </div>
     </div>
   );
 
-  if (isIOS && !isStandalone) return (
-    <div className="mx-4 mt-3 bg-slate-800 border border-slate-700 rounded-2xl p-4">
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <div className="text-sm font-semibold text-white">📲 Installer sur iPhone</div>
-        <button onClick={dismiss} className="text-slate-500"><X className="w-4 h-4" /></button>
+  if (isIOS) return (
+    <div className="mx-4 mt-4 bg-slate-800/90 border border-slate-700/50 rounded-3xl p-5">
+      <div className="flex items-start justify-between gap-2 mb-4">
+        <div className="font-bold text-white text-base">📲 Installer sur iPhone</div>
+        <button onClick={dismiss} className="text-slate-500"><X className="w-5 h-5" /></button>
       </div>
-      <ol className="text-xs text-slate-400 space-y-2">
-        <li className="flex items-center gap-2">
-          <span className="w-5 h-5 rounded-full bg-blue-600/30 text-blue-400 flex items-center justify-center font-bold shrink-0">1</span>
-          Appuyez sur <span className="text-blue-400 font-medium mx-1">Partager ⎙</span> en bas de Safari
-        </li>
-        <li className="flex items-center gap-2">
-          <span className="w-5 h-5 rounded-full bg-blue-600/30 text-blue-400 flex items-center justify-center font-bold shrink-0">2</span>
-          Appuyez sur <span className="text-white font-medium mx-1">"Sur l'écran d'accueil"</span>
-        </li>
-        <li className="flex items-center gap-2">
-          <span className="w-5 h-5 rounded-full bg-blue-600/30 text-blue-400 flex items-center justify-center font-bold shrink-0">3</span>
-          Appuyez sur <span className="text-white font-medium mx-1">"Ajouter"</span>
-        </li>
-      </ol>
+      <div className="space-y-3">
+        {[
+          ["1", <>Appuyez sur <span className="text-blue-400 font-bold">Partager ⎙</span> en bas de Safari</>],
+          ["2", <>"Sur l'écran d'accueil"</>],
+          ["3", <>"Ajouter"</>],
+        ].map(([n, txt]) => (
+          <div key={n} className="flex items-center gap-3">
+            <span className="w-8 h-8 rounded-full bg-blue-600/30 text-blue-400 text-sm font-bold flex items-center justify-center shrink-0">{n}</span>
+            <span className="text-slate-300 text-base">{txt}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 
   return null;
 }
 
-// ── Carte d'offre de vacation ─────────────────────────────────────────────────
-function OfferCard({ offer, token, onResponded }) {
-  const [loading, setLoading] = useState(null);
-  const [done, setDone]       = useState(null);
-  const [error, setError]     = useState('');
-
-  async function respond(action) {
-    setLoading(action);
-    setError('');
-    try {
-      const res = await fetch(`${API_BASE}/agent-portal/${token}/offers/${offer.id}/${action}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Erreur');
-      setDone(action === 'accept' ? 'accepted' : 'declined');
-      setTimeout(() => onResponded(), 1500);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(null);
-    }
-  }
-
-  return (
-    <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 overflow-hidden">
-      <div className="p-4 space-y-4">
-        <div className="flex items-start gap-3">
-          <div className="w-1 self-stretch rounded-full bg-amber-400 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <div className="font-semibold text-white text-sm">{offer.site_name}</div>
-            <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
-              <Clock className="w-3 h-3" />
-              <span>{formatTime(offer.start_time)} – {formatTime(offer.end_time)}</span>
-              <span className="text-slate-600">·</span>
-              <span>{shiftDuration(offer.start_time, offer.end_time)}</span>
-            </div>
-            <div className="text-xs text-amber-300/80 mt-1 capitalize font-medium">
-              {dayLabel(offer.date)}
-            </div>
-            {offer.site_address && (
-              <div className="flex items-center gap-1 text-xs text-slate-500 mt-1">
-                <MapPin className="w-3 h-3" />
-                {offer.site_address}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {done ? (
-          <div className={`rounded-xl px-4 py-3 text-center text-sm font-semibold ${
-            done === 'accepted' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'
-          }`}>
-            {done === 'accepted' ? '✅ Vacation acceptée !' : '❌ Vacation déclinée'}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => respond('decline')}
-              disabled={!!loading}
-              className="flex items-center justify-center gap-2 py-3 rounded-xl bg-red-500/15 border border-red-500/30 text-red-300 text-sm font-semibold active:scale-95 transition-all disabled:opacity-50"
-            >
-              {loading === 'decline' ? <Loader2 className="w-4 h-4 animate-spin" /> : '❌'} Décliner
-            </button>
-            <button
-              onClick={() => respond('accept')}
-              disabled={!!loading}
-              className="flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-sm font-semibold active:scale-95 transition-all disabled:opacity-50"
-            >
-              {loading === 'accept' ? <Loader2 className="w-4 h-4 animate-spin" /> : '✅'} Accepter
-            </button>
-          </div>
-        )}
-        {error && <p className="text-xs text-red-400 text-center">{error}</p>}
-      </div>
-    </div>
-  );
-}
-
-// ── Onglet Planning ───────────────────────────────────────────────────────────
-function TabPlanning({ shifts, token, today, onUpdated }) {
-  const grouped = {};
-  for (const s of shifts) {
-    if (!grouped[s.date]) grouped[s.date] = [];
-    grouped[s.date].push(s);
-  }
-  const days = Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b));
-  const todayShifts = grouped[today] || [];
-  const futureShifts = days.filter(([d]) => d !== today);
-
-  return (
-    <div className="space-y-6">
-      {/* Aujourd'hui */}
-      <section>
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-          <h2 className="text-xs font-semibold text-blue-300 uppercase tracking-widest">Aujourd'hui</h2>
-        </div>
-        {todayShifts.length > 0 ? (
-          <div className="space-y-2">
-            {todayShifts.map(s => (
-              <ShiftCard key={s.id} shift={s} token={token} onUpdated={onUpdated} highlight />
-            ))}
-          </div>
-        ) : (
-          <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 text-center">
-            <Calendar className="w-7 h-7 text-slate-600 mx-auto mb-2" />
-            <p className="text-slate-400 text-sm">Pas de vacation aujourd'hui</p>
-          </div>
-        )}
-      </section>
-
-      {/* À venir */}
-      {futureShifts.length > 0 && (
-        <section>
-          <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">À venir</h2>
-          <div className="space-y-4">
-            {futureShifts.map(([date, dayShifts]) => (
-              <div key={date}>
-                <div className="text-xs font-medium text-slate-500 capitalize px-1 mb-2">
-                  {dayLabel(date)}
-                </div>
-                <div className="space-y-2">
-                  {dayShifts.map(s => (
-                    <ShiftCard key={s.id} shift={s} token={token} onUpdated={onUpdated} highlight={false} />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {days.length === 0 && (
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-10 text-center">
-          <Calendar className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-          <p className="text-slate-400 text-sm">Aucune vacation planifiée<br />dans les 30 prochains jours</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Onglet Demandes ───────────────────────────────────────────────────────────
-function TabDemandes({ offers, token, onReload }) {
-  if (offers.length === 0) {
-    return (
-      <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-10 text-center">
-        <CheckCircle className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-        <p className="text-white font-medium text-sm mb-1">Aucune demande en attente</p>
-        <p className="text-slate-500 text-xs">Les propositions de vacation apparaîtront ici</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      <p className="text-xs text-slate-500 px-1">
-        {offers.length} proposition{offers.length > 1 ? 's' : ''} en attente de réponse
-      </p>
-      {offers.map(offer => (
-        <OfferCard key={offer.id} offer={offer} token={token} onResponded={onReload} />
-      ))}
-    </div>
-  );
-}
-
-// ── Onglet Profil ─────────────────────────────────────────────────────────────
-function TabProfil({ agent, stats, token }) {
-  const { status, enable, disable } = useNotifStatus(token);
-
-  const contractLabel = {
-    CDI: 'CDI — Contrat à durée indéterminée',
-    CDD: 'CDD — Contrat à durée déterminée',
-    Interim: 'Intérim',
-    Vacation: 'Vacation',
-  }[agent.contract_type] || agent.contract_type;
-
-  return (
-    <div className="space-y-4">
-      {/* Avatar + nom */}
-      <div className="bg-slate-800/60 border border-slate-700/50 rounded-2xl p-5 flex items-center gap-4">
-        <div
-          className="w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-bold text-white shrink-0"
-          style={{ backgroundColor: agent.color || '#3B82F6' }}
-        >
-          {initials(agent.first_name, agent.last_name)}
-        </div>
-        <div>
-          <div className="font-bold text-white text-lg">{agent.first_name} {agent.last_name}</div>
-          <div className="text-sm text-slate-400">{agent.company_name}</div>
-          {agent.employee_number && (
-            <div className="flex items-center gap-1 text-xs text-slate-500 mt-1">
-              <Hash className="w-3 h-3" /> {agent.employee_number}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Stats du mois */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-slate-800/60 border border-slate-700/50 rounded-2xl p-4 text-center">
-          <div className="text-2xl font-bold text-white">{stats.shift_count}</div>
-          <div className="text-xs text-slate-400 mt-1 flex items-center justify-center gap-1">
-            <CalendarDays className="w-3 h-3" /> Vacations ce mois
-          </div>
-        </div>
-        <div className="bg-slate-800/60 border border-slate-700/50 rounded-2xl p-4 text-center">
-          <div className="text-2xl font-bold text-white">{stats.hours_count}h</div>
-          <div className="text-xs text-slate-400 mt-1 flex items-center justify-center gap-1">
-            <TrendingUp className="w-3 h-3" /> Heures ce mois
-          </div>
-        </div>
-      </div>
-
-      {/* Infos de contact */}
-      <div className="bg-slate-800/60 border border-slate-700/50 rounded-2xl p-4 space-y-3">
-        <div className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1">Contact</div>
-        {agent.email && (
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-slate-700 flex items-center justify-center shrink-0">
-              <Mail className="w-4 h-4 text-slate-400" />
-            </div>
-            <div>
-              <div className="text-xs text-slate-500">Email</div>
-              <div className="text-sm text-white">{agent.email}</div>
-            </div>
-          </div>
-        )}
-        {agent.phone && (
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-slate-700 flex items-center justify-center shrink-0">
-              <Phone className="w-4 h-4 text-slate-400" />
-            </div>
-            <div>
-              <div className="text-xs text-slate-500">Téléphone</div>
-              <div className="text-sm text-white">{agent.phone}</div>
-            </div>
-          </div>
-        )}
-        {!agent.email && !agent.phone && (
-          <p className="text-sm text-slate-500 italic">Aucune information de contact</p>
-        )}
-      </div>
-
-      {/* Infos contrat */}
-      <div className="bg-slate-800/60 border border-slate-700/50 rounded-2xl p-4 space-y-3">
-        <div className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1">Contrat</div>
-        {agent.contract_type && (
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-slate-700 flex items-center justify-center shrink-0">
-              <FileText className="w-4 h-4 text-slate-400" />
-            </div>
-            <div>
-              <div className="text-xs text-slate-500">Type de contrat</div>
-              <div className="text-sm text-white">{contractLabel}</div>
-            </div>
-          </div>
-        )}
-        {agent.entry_date && (
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-slate-700 flex items-center justify-center shrink-0">
-              <CalendarDays className="w-4 h-4 text-slate-400" />
-            </div>
-            <div>
-              <div className="text-xs text-slate-500">Date d'entrée</div>
-              <div className="text-sm text-white">
-                {format(new Date(agent.entry_date), 'd MMMM yyyy', { locale: fr })}
-              </div>
-            </div>
-          </div>
-        )}
-        {agent.carte_pro && (
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-slate-700 flex items-center justify-center shrink-0">
-              <Shield className="w-4 h-4 text-slate-400" />
-            </div>
-            <div>
-              <div className="text-xs text-slate-500">Carte professionnelle</div>
-              <div className="text-sm text-white font-mono">{agent.carte_pro}</div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Notifications */}
-      <div className="bg-slate-800/60 border border-slate-700/50 rounded-2xl p-4">
-        <div className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Notifications</div>
-        {status === 'unsupported' ? (
-          <p className="text-sm text-slate-500">Notifications non supportées sur ce navigateur</p>
-        ) : status === 'blocked' ? (
-          <div className="flex items-start gap-3">
-            <BellOff className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-            <div>
-              <div className="text-sm text-white">Notifications bloquées</div>
-              <div className="text-xs text-slate-400 mt-0.5">Autorisez les notifications dans les réglages de votre navigateur</div>
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              {status === 'on' ? (
-                <Bell className="w-5 h-5 text-emerald-400" />
-              ) : (
-                <BellOff className="w-5 h-5 text-slate-500" />
-              )}
-              <div>
-                <div className="text-sm text-white">Rappels de vacation</div>
-                <div className="text-xs text-slate-400">
-                  {status === 'on' ? 'Activés (24h et 2h avant)' : 'Désactivés'}
-                </div>
-              </div>
-            </div>
-            <button
-              onClick={status === 'on' ? disable : enable}
-              disabled={status === 'loading'}
-              className={`relative w-12 h-6 rounded-full transition-colors shrink-0 ${
-                status === 'on' ? 'bg-blue-600' : 'bg-slate-600'
-              } disabled:opacity-50`}
-            >
-              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform shadow ${
-                status === 'on' ? 'translate-x-6' : 'translate-x-0.5'
-              }`} />
-            </button>
-          </div>
-        )}
-      </div>
-
-      <p className="text-center text-xs text-slate-600 pb-2">
-        SecuroPlan · {agent.company_name}
-      </p>
-    </div>
-  );
-}
-
 // ── Navigation bas de page ────────────────────────────────────────────────────
 function BottomNav({ active, onChange, offerCount }) {
   const tabs = [
     { id: 'planning', icon: Calendar, label: 'Planning' },
-    { id: 'demandes', icon: Bell, label: 'Demandes', badge: offerCount },
-    { id: 'profil', icon: User, label: 'Profil' },
+    { id: 'demandes', icon: Bell,     label: 'Demandes', badge: offerCount },
+    { id: 'profil',   icon: User,     label: 'Profil' },
   ];
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur border-t border-slate-700/50 z-20"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-      <div className="max-w-lg mx-auto flex">
+    <nav
+      className="fixed bottom-0 left-0 right-0 bg-slate-900/98 border-t border-slate-800 z-20"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+    >
+      <div className="flex">
         {tabs.map(({ id, icon: Icon, label, badge }) => (
           <button
             key={id}
             onClick={() => onChange(id)}
-            className={`flex-1 flex flex-col items-center gap-1 py-3 transition-colors relative ${
+            className={`flex-1 flex flex-col items-center gap-1.5 py-3 transition-colors relative active:opacity-70 ${
               active === id ? 'text-blue-400' : 'text-slate-500'
             }`}
           >
+            {active === id && (
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-10 h-0.5 bg-blue-400 rounded-full" />
+            )}
             <div className="relative">
-              <Icon className="w-5 h-5" />
+              <Icon className="w-6 h-6" />
               {badge > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-amber-500 rounded-full text-white text-[10px] font-bold flex items-center justify-center">
+                <span className="absolute -top-2 -right-2 w-5 h-5 bg-amber-500 rounded-full text-white text-[10px] font-bold flex items-center justify-center">
                   {badge > 9 ? '9+' : badge}
                 </span>
               )}
             </div>
-            <span className="text-[10px] font-medium">{label}</span>
-            {active === id && (
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-blue-400 rounded-full" />
-            )}
+            <span className="text-xs font-semibold">{label}</span>
           </button>
         ))}
       </div>
@@ -684,9 +672,9 @@ function BottomNav({ active, onChange, offerCount }) {
   );
 }
 
-// ── Page principale ───────────────────────────────────────────────────────────
+// ── App principale ────────────────────────────────────────────────────────────
 export default function AgentPortal() {
-  const { token } = useParams();
+  const { token }   = useParams();
   const [data, setData]       = useState(null);
   const [error, setError]     = useState('');
   const [loading, setLoading] = useState(true);
@@ -694,10 +682,10 @@ export default function AgentPortal() {
 
   const load = useCallback(async () => {
     try {
-      const res  = await fetch(`${API_BASE}/agent-portal/${token}`);
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Lien invalide');
-      setData(json);
+      const r = await fetch(`${API_BASE}/agent-portal/${token}`);
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'Lien invalide');
+      setData(j);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -707,58 +695,53 @@ export default function AgentPortal() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Basculer sur l'onglet Demandes si des offres arrivent
-  useEffect(() => {
-    if (data?.offers?.length > 0 && tab === 'planning') {
-      // on ne force pas — laisser l'utilisateur voir le planning en premier
-    }
-  }, [data?.offers?.length]);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
+  if (loading) return (
+    <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center gap-4">
+      <div className="w-16 h-16 rounded-3xl bg-blue-600 flex items-center justify-center">
+        <Shield className="w-8 h-8 text-white" />
       </div>
-    );
-  }
+      <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
+    </div>
+  );
 
-  if (error) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6">
-        <div className="max-w-sm w-full bg-slate-800 border border-red-600/40 rounded-2xl p-8 text-center space-y-4">
-          <AlertTriangle className="w-10 h-10 text-red-400 mx-auto" />
-          <h1 className="text-lg font-semibold text-white">Lien invalide</h1>
-          <p className="text-sm text-slate-400">{error}</p>
-        </div>
+  if (error) return (
+    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6">
+      <div className="w-full max-w-xs bg-slate-800 border border-red-800/50 rounded-3xl p-8 text-center space-y-4">
+        <AlertTriangle className="w-12 h-12 text-red-400 mx-auto" />
+        <div className="text-lg font-bold text-white">Lien invalide</div>
+        <p className="text-slate-400">{error}</p>
       </div>
-    );
-  }
+    </div>
+  );
 
   const { agent, shifts, offers = [], today, stats = {} } = data;
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
-      {/* Header sticky */}
-      <header className="bg-slate-900/95 backdrop-blur border-b border-slate-700/50 sticky top-0 z-10">
-        <div className="max-w-lg mx-auto px-4 py-3.5 flex items-center gap-3">
+    <div
+      className="min-h-screen bg-slate-900 text-white"
+      style={{ paddingTop: 'env(safe-area-inset-top)' }}
+    >
+      {/* Header */}
+      <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-10">
+        <div className="flex items-center gap-3 px-4 py-3">
           <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-sm font-bold text-white"
+            className="w-11 h-11 rounded-2xl flex items-center justify-center text-base font-bold text-white shrink-0"
             style={{ backgroundColor: agent.color || '#3B82F6' }}
           >
             {initials(agent.first_name, agent.last_name)}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="font-semibold text-white text-sm truncate">
+            <div className="font-bold text-white text-base leading-tight truncate">
               {agent.first_name} {agent.last_name}
             </div>
-            <div className="text-xs text-slate-400 truncate">{agent.company_name}</div>
+            <div className="text-slate-400 text-sm truncate">{agent.company_name}</div>
           </div>
           {offers.length > 0 && tab !== 'demandes' && (
             <button
               onClick={() => setTab('demandes')}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-500/20 border border-amber-500/40 rounded-xl text-amber-300 text-xs font-semibold animate-pulse"
+              className="flex items-center gap-2 px-3 py-2 bg-amber-500/20 border border-amber-500/40 rounded-2xl text-amber-300 text-sm font-bold"
             >
-              <Bell className="w-3.5 h-3.5" />
+              <Bell className="w-4 h-4" />
               {offers.length}
             </button>
           )}
@@ -767,8 +750,8 @@ export default function AgentPortal() {
 
       <InstallBanner />
 
-      {/* Contenu principal */}
-      <main className="max-w-lg mx-auto px-4 py-5 pb-28">
+      {/* Contenu */}
+      <main className="px-4 py-5 pb-28">
         {tab === 'planning' && (
           <TabPlanning shifts={shifts} token={token} today={today} onUpdated={load} />
         )}
