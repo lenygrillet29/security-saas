@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Plus, Edit2, Trash2, Phone, Mail, Search, Download, Archive, ArchiveRestore, Send, AlertTriangle, Zap, Smartphone, User, MapPin, CreditCard, Shield, CalendarDays, ChevronDown, ChevronUp, Camera, X, BadgeCheck } from 'lucide-react';
 import { agentsApi, shiftsApi, pdfApi, emailApi, addonsApi } from '../api';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Modal from '../components/Modal';
 import Confirm from '../components/Confirm';
 import { ToastProvider, useToast } from '../components/Toast';
@@ -279,6 +279,7 @@ function AgentForm({ agent, onSave, onClose }) {
 function AgentsInner() {
   const toast = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
   const [agents, setAgents] = useState([]);
   const [search, setSearch] = useState('');
   const [showArchived, setShowArchived] = useState(false);
@@ -304,6 +305,18 @@ function AgentsInner() {
     load();
     addonsApi.limits().then(setLimits).catch(() => {});
   }, []);
+
+  // Ouverture automatique depuis le planning (double-clic sur nom)
+  useEffect(() => {
+    const openId = location.state?.openAgentId;
+    if (!openId || agents.length === 0) return;
+    const agent = agents.find(a => a.id === openId);
+    if (agent) {
+      setModal({ agent });
+      // Nettoyer le state pour éviter de ré-ouvrir si on revient
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state?.openAgentId, agents]);
 
   async function handleDelete() {
     try {

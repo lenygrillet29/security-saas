@@ -6,6 +6,7 @@ import {
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Plus, Download, Mail, Trash2, Edit2, Send, Users } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { shiftsApi, agentsApi, sitesApi, absencesApi, pdfApi, emailApi } from '../api';
 import Modal from '../components/Modal';
 import Confirm from '../components/Confirm';
@@ -206,7 +207,7 @@ function ExportModal({ onClose, agents, sites }) {
 }
 
 // ——— Weekly View ———
-function WeeklyView({ days, shifts, absences, agents, onAddShift, onEditShift, onDeleteShift }) {
+function WeeklyView({ days, shifts, absences, agents, onAddShift, onEditShift, onDeleteShift, onOpenAgent }) {
   const getShiftsForDay = (day, agentId) =>
     shifts.filter(s => isSameDay(parseISO(s.date), day) && s.agent_id === agentId);
 
@@ -249,8 +250,16 @@ function WeeklyView({ days, shifts, absences, agents, onAddShift, onEditShift, o
             <tr key={agent.id} className={idx % 2 === 0 ? 'bg-dark-800/30' : ''}>
               <td className="px-3 py-2 border-b border-dark-600/50">
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: agent.color || '#3B82F6' }} />
-                  <span className="text-xs text-slate-300 font-medium truncate">
+                  {agent.photo ? (
+                    <img src={agent.photo} alt="" className="w-5 h-5 rounded-full object-cover shrink-0" />
+                  ) : (
+                    <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: agent.color || '#3B82F6' }} />
+                  )}
+                  <span
+                    className="text-xs text-slate-300 font-medium truncate cursor-pointer hover:text-white hover:underline"
+                    title="Double-clic pour ouvrir la fiche"
+                    onDoubleClick={() => onOpenAgent?.(agent)}
+                  >
                     {agent.first_name} {agent.last_name}
                   </span>
                 </div>
@@ -406,6 +415,7 @@ function MonthlyView({ currentDate, shifts, absences, agents, onAddShift, onEdit
 // ——— Main Planning ———
 function PlanningInner() {
   const toast = useToast();
+  const navigate = useNavigate();
   const [view, setView] = useState('week'); // 'week' | 'month'
   const [currentDate, setCurrentDate] = useState(new Date());
   const [shifts, setShifts] = useState([]);
@@ -546,6 +556,7 @@ function PlanningInner() {
             onAddShift={openAdd}
             onEditShift={openEdit}
             onDeleteShift={setDeleteId}
+            onOpenAgent={agent => navigate('/agents', { state: { openAgentId: agent.id } })}
           />
         ) : (
           <MonthlyView
