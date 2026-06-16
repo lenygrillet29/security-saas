@@ -285,7 +285,7 @@ async function sendTimedReminders() {
       const shifts = await db.all(
         `SELECT sh.id, sh.start_time, sh.end_time,
                 s.name AS site_name, s.city AS site_city,
-                a.first_name, subs.endpoint, subs.p256dh, subs.auth
+                a.first_name, a.agent_token, subs.endpoint, subs.p256dh, subs.auth
          FROM shifts sh
          JOIN sites s    ON s.id = sh.site_id
          JOIN agents a   ON a.id = sh.agent_id
@@ -304,7 +304,7 @@ async function sendTimedReminders() {
               icon:  '/icon-192.png',
               badge: '/icon-192.png',
               tag:   `shift-${shift.id}-${check.label}`,
-              data:  { url: '/agent' },
+              data:  { url: `/agent/${shift.agent_token}` },
             })
           );
           totalSent++;
