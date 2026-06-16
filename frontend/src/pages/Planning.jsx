@@ -7,7 +7,7 @@ import {
 import { fr } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Plus, Download, Mail, Trash2, Edit2, Send, Users, AlertTriangle, RefreshCw, X, ExternalLink } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { shiftsApi, agentsApi, sitesApi, clientsApi, absencesApi, pdfApi, emailApi } from '../api';
+import { shiftsApi, agentsApi, sitesApi, clientsApi, absencesApi, pdfApi, emailApi, shiftOffersApi } from '../api';
 import Modal from '../components/Modal';
 import Confirm from '../components/Confirm';
 import { ToastProvider, useToast } from '../components/Toast';
@@ -228,6 +228,151 @@ function ShiftForm({ shift, agents, sites: initialSites, onSave, onClose }) {
   );
 }
 
+// ——— Modal d'envoi d'offre de vacation ———
+function SendOfferModal({ shift, agents, onClose, onSent }) {
+  const toast = useToast();
+  const [selected, setSelected] = useState([]);
+  const [sending, setSending] = useState(false);
+  const [offers, setOffers] = useState([]);
+  const [loadingOffers, setLoadingOffers] = useState(true);
+
+  useEffect(() => {
+    shiftOffersApi.list({ shift_id: shift.id })
+      .then(setOffers)
+      .catch(() => {})
+      .finally(() => setLoadingOffers(false));
+  }, [shift.id]);
+
+  const offerAgentIds = new Set(offers.map(o => o.agent_id));
+  const pendingCount  = offers.filter(o => o.status === 'pending').length;
+  const acceptedOffer = offers.find(o => o.status === 'accepted');
+
+  function toggle(id) {
+    setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }
+
+  async function handleSend() {
+    if (!selected.length) return toast('Sélectionnez au moins un agent', 'error');
+    setSending(true);
+    try {
+      const res = await shiftOffersApi.send({ shift_id: shift.id, agent_ids: selected });
+      const sent = res.results.filter(r => r.status === 'sent').length;
+      const noEmail = res.results.filter(r => r.status === 'no_email').length;
+      toast(`${sent} demande${sent > 1 ? 's' : ''} envoyée${sent > 1 ? 's' : ''}${noEmail ? ` (${noEmail} sans email)` : ''}`);
+      setSelected([]);
+      const updated = await shiftOffersApi.list({ shift_id: shift.id });
+      setOffers(updated);
+      onSent?.();
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally { setSending(false); }
+  }
+
+  async function handleCancel(offerId) {
+    try {
+      await shiftOffersApi.cancel(offerId);
+      setOffers(prev => prev.filter(o => o.id !== offerId));
+    } catch (err) { toast(err.message, 'error'); }
+  }
+
+  const STATUS_LABEL = { pending: 'En attente', accepted: 'Accepté', declined: 'Décliné', auto_declined: 'Annulé' };
+  const STATUS_COLOR = { pending: 'text-amber-400', accepted: 'text-emerald-400', declined: 'text-red-400', auto_declined: 'text-slate-500' };
+
+  return (
+    <Modal title="Envoyer une demande" onClose={onClose} size="md">
+      <div className="space-y-4">
+        {/* Info shift */}
+        <div className="bg-dark-700 border border-dark-500 rounded-lg px-4 py-3 text-sm">
+          <span className="text-slate-400">{shift.site_name}</span>
+          <span className="text-slate-500 mx-2">·</span>
+          <span className="text-white font-medium">{shift.date}</span>
+          <span className="text-slate-500 mx-2">·</span>
+          <span className="text-slate-300">{shift.start_time}–{shift.end_time}</span>
+        </div>
+
+        {/* Historique des offres */}
+        {!loadingOffers && offers.length > 0 && (
+          <div>
+            <p className="text-xs text-slate-400 mb-2 font-medium uppercase tracking-wide">Demandes envoyées</p>
+            <div className="space-y-1.5">
+              {offers.map(o => (
+                <div key={o.id} className="flex items-center justify-between bg-dark-700 border border-dark-500 rounded-lg px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+                      style={{ backgroundColor: o.color || '#3B82F6' }}>
+                      {o.first_name?.[0]}{o.last_name?.[0]}
+                    </div>
+                    <span className="text-sm text-white">{o.first_name} {o.last_name}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-medium ${STATUS_COLOR[o.status] || 'text-slate-400'}`}>
+                      {STATUS_LABEL[o.status] || o.status}
+                    </span>
+                    {o.status === 'pending' && (
+                      <button onClick={() => handleCancel(o.id)} className="text-slate-600 hover:text-red-400 transition-colors">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Sélection agents */}
+        {!acceptedOffer && (
+          <div>
+            <p className="text-xs text-slate-400 mb-2 font-medium uppercase tracking-wide">Envoyer à</p>
+            <div className="space-y-1.5 max-h-52 overflow-y-auto">
+              {agents.filter(a => a.email && !offerAgentIds.has(a.id)).map(a => (
+                <button key={a.id} onClick={() => toggle(a.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-colors text-left ${
+                    selected.includes(a.id)
+                      ? 'bg-blue-600/20 border-blue-500 text-white'
+                      : 'bg-dark-700 border-dark-500 text-slate-300 hover:border-dark-400'
+                  }`}>
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+                    style={{ backgroundColor: a.color || '#3B82F6' }}>
+                    {a.first_name[0]}{a.last_name[0]}
+                  </div>
+                  <span className="text-sm flex-1">{a.first_name} {a.last_name}</span>
+                  <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                    selected.includes(a.id) ? 'bg-blue-600 border-blue-500' : 'border-dark-400'
+                  }`}>
+                    {selected.includes(a.id) && <span className="text-white text-xs">✓</span>}
+                  </div>
+                </button>
+              ))}
+              {agents.filter(a => a.email && !offerAgentIds.has(a.id)).length === 0 && (
+                <p className="text-xs text-slate-500 text-center py-3">
+                  {offerAgentIds.size > 0 ? 'Tous les agents ont déjà été contactés.' : 'Aucun agent avec email disponible.'}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {acceptedOffer && (
+          <div className="bg-emerald-900/20 border border-emerald-700/40 rounded-lg p-3 text-sm text-emerald-300 text-center">
+            ✅ {acceptedOffer.first_name} {acceptedOffer.last_name} a accepté cette vacation.
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2 pt-1">
+          <button className="btn-secondary" onClick={onClose}>Fermer</button>
+          {!acceptedOffer && selected.length > 0 && (
+            <button className="btn-primary" onClick={handleSend} disabled={sending}>
+              <Send className="w-4 h-4" />
+              {sending ? 'Envoi...' : `Envoyer (${selected.length})`}
+            </button>
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function ExportModal({ onClose, agents, sites }) {
   const toast = useToast();
   const [type, setType] = useState('agent');
@@ -435,12 +580,28 @@ function ReplacementModal({ shift, onClose, onReplaced, toast }) {
 }
 
 // ——— Weekly View ———
-function WeeklyView({ days, shifts, absences, agents, onAddShift, onEditShift, onDeleteShift, onOpenAgent, onReplaceShift }) {
+function WeeklyView({ days, shifts, absences, agents, onAddShift, onEditShift, onDeleteShift, onOpenAgent, onReplaceShift, onSendOffer, offers = [] }) {
   const getShiftsForDay = (day, agentId) =>
     shifts.filter(s => isSameDay(parseISO(s.date), day) && String(s.agent_id) === String(agentId));
 
   const getUnassignedForDay = (day) =>
     shifts.filter(s => isSameDay(parseISO(s.date), day) && !s.agent_id);
+
+  // Statut d'offre le plus récent pour un shift donné
+  const getOfferStatus = (shiftId) => {
+    const shiftOffers = offers.filter(o => o.shift_id === shiftId);
+    if (!shiftOffers.length) return null;
+    if (shiftOffers.some(o => o.status === 'accepted')) return 'accepted';
+    if (shiftOffers.some(o => o.status === 'pending')) return 'pending';
+    if (shiftOffers.every(o => o.status === 'declined' || o.status === 'auto_declined')) return 'declined';
+    return null;
+  };
+
+  const OFFER_BADGE = {
+    pending:  { label: 'En attente', cls: 'bg-amber-500/20 text-amber-300 border-amber-500/30' },
+    accepted: { label: 'Accepté', cls: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
+    declined: { label: 'Décliné', cls: 'bg-red-500/20 text-red-300 border-red-500/30' },
+  };
 
   const getAbsencesForDay = (day, agentId) =>
     absences.filter(a => {
@@ -572,31 +733,42 @@ function WeeklyView({ days, shifts, absences, agents, onAddShift, onEditShift, o
                   return (
                     <td key={day.toISOString()} className={`px-1 py-1.5 border-b border-dark-600/50 align-top ${isSun ? 'bg-amber-900/5' : ''}`}>
                       <div className="space-y-0.5 min-h-[32px]">
-                        {dayShifts.map(shift => (
-                          <div
-                            key={shift.id}
-                            className="shift-chip border border-slate-500/40 bg-slate-700/40 text-slate-300 flex items-center justify-between group"
-                          >
-                            <span className="flex items-center gap-1">
-                              <button
-                                title="Affecter un agent disponible"
-                                onClick={() => onReplaceShift?.({ ...shift, agent_name: null })}
-                                className="text-slate-400 hover:text-blue-400 transition-colors"
-                              >
-                                <Users className="w-2.5 h-2.5" />
-                              </button>
-                              {shift.start_time}–{shift.end_time}
-                            </span>
-                            <div className="hidden group-hover:flex gap-0.5 ml-1">
-                              <button onClick={() => onEditShift(shift)} className="hover:text-white p-0.5 rounded">
-                                <Edit2 className="w-2.5 h-2.5" />
-                              </button>
-                              <button onClick={() => onDeleteShift(shift.id)} className="hover:text-red-400 p-0.5 rounded">
-                                <Trash2 className="w-2.5 h-2.5" />
-                              </button>
+                        {dayShifts.map(shift => {
+                          const offerStatus = getOfferStatus(shift.id);
+                          const badge = offerStatus ? OFFER_BADGE[offerStatus] : null;
+                          return (
+                            <div key={shift.id} className="space-y-0.5">
+                              <div className="shift-chip border border-slate-500/40 bg-slate-700/40 text-slate-300 flex items-center justify-between group">
+                                <span className="flex items-center gap-1">
+                                  <button title="Affecter un agent disponible"
+                                    onClick={() => onReplaceShift?.({ ...shift, agent_name: null })}
+                                    className="text-slate-400 hover:text-blue-400 transition-colors">
+                                    <Users className="w-2.5 h-2.5" />
+                                  </button>
+                                  {shift.start_time}–{shift.end_time}
+                                </span>
+                                <div className="hidden group-hover:flex gap-0.5 ml-1">
+                                  <button title="Envoyer une demande"
+                                    onClick={() => onSendOffer?.({ ...shift })}
+                                    className="hover:text-blue-400 p-0.5 rounded">
+                                    <Send className="w-2.5 h-2.5" />
+                                  </button>
+                                  <button onClick={() => onEditShift(shift)} className="hover:text-white p-0.5 rounded">
+                                    <Edit2 className="w-2.5 h-2.5" />
+                                  </button>
+                                  <button onClick={() => onDeleteShift(shift.id)} className="hover:text-red-400 p-0.5 rounded">
+                                    <Trash2 className="w-2.5 h-2.5" />
+                                  </button>
+                                </div>
+                              </div>
+                              {badge && (
+                                <div className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${badge.cls}`}>
+                                  {badge.label}
+                                </div>
+                              )}
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                         <button
                           onClick={() => onAddShift(null, day)}
                           className="w-full text-left px-1 py-0.5 rounded text-xs text-slate-600 hover:text-blue-400 hover:bg-blue-600/10 transition-colors"
@@ -732,10 +904,12 @@ function PlanningInner() {
   const [absences, setAbsences] = useState([]);
   const [agents, setAgents] = useState([]);
   const [sites, setSites] = useState([]);
-  const [shiftModal, setShiftModal] = useState(null); // null | { shift?, agentId?, date? }
+  const [shiftModal, setShiftModal] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
   const [exportModal, setExportModal] = useState(false);
-  const [replacementShift, setReplacementShift] = useState(null); // shift to find replacement for
+  const [replacementShift, setReplacementShift] = useState(null);
+  const [offerShift, setOfferShift] = useState(null); // shift pour lequel envoyer des offres
+  const [offers, setOffers] = useState([]); // toutes les offres de la période
   const [loading, setLoading] = useState(false);
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
@@ -756,16 +930,18 @@ function PlanningInner() {
       start_date: format(rangeStart, 'yyyy-MM-dd'),
       end_date: format(rangeEnd, 'yyyy-MM-dd'),
     };
-    const [s, ab, ag, si] = await Promise.all([
+    const [s, ab, ag, si, of] = await Promise.all([
       shiftsApi.list(params),
       absencesApi.list(params),
       agentsApi.list(true),
       sitesApi.list(),
+      shiftOffersApi.list().catch(() => []),
     ]);
     setShifts(s);
     setAbsences(ab);
     setAgents(ag);
     setSites(si);
+    setOffers(of);
     setLoading(false);
   }, [format(rangeStart, 'yyyy-MM-dd'), format(rangeEnd, 'yyyy-MM-dd')]);
 
@@ -869,6 +1045,8 @@ function PlanningInner() {
             onDeleteShift={setDeleteId}
             onOpenAgent={agent => navigate('/agents', { state: { openAgentId: agent.id } })}
             onReplaceShift={setReplacementShift}
+            onSendOffer={setOfferShift}
+            offers={offers}
           />
         ) : (
           <MonthlyView
@@ -918,6 +1096,15 @@ function PlanningInner() {
           onClose={() => setReplacementShift(null)}
           onReplaced={fetchData}
           toast={toast}
+        />
+      )}
+
+      {offerShift && (
+        <SendOfferModal
+          shift={offerShift}
+          agents={agents}
+          onClose={() => setOfferShift(null)}
+          onSent={fetchData}
         />
       )}
     </div>

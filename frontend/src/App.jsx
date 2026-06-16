@@ -23,6 +23,7 @@ import RecapHeures from './pages/RecapHeures';
 import Chiffrage from './pages/Chiffrage';
 import ClientPortal from './pages/ClientPortal';
 import AgentPortal from './pages/AgentPortal';
+import ShiftOfferResponse from './pages/ShiftOfferResponse';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import MentionsLegales from './pages/MentionsLegales';
@@ -63,6 +64,9 @@ export default function App() {
             <Route path="/portal/:token" element={<ClientPortal />} />
             {/* Portail agent mobile (public, sans compte) */}
             <Route path="/agent/:token" element={<AgentPortal />} />
+            {/* Réponse aux offres de vacation (liens email) */}
+            <Route path="/offer/:token/:status" element={<ShiftOfferResponse />} />
+            <Route path="/offer/:token" element={<ShiftOfferResponse />} />
             {/* Mot de passe oublié */}
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password/:token" element={<ResetPassword />} />

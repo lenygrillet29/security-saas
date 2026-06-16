@@ -301,4 +301,43 @@ function passwordReset({ resetUrl }) {
   `);
 }
 
-module.exports = { welcome, trialEnding, paymentSucceeded, paymentFailed, cancellationConfirmed, newFeature, contractSignRequest, clientPortalLink, agentPortalLink, passwordReset };
+// ─── Offre de vacation ─────────────────────────────────────────────────────────
+function shiftOffer({ agentFirstName, companyName, date, startTime, endTime, siteName, acceptUrl, declineUrl }) {
+  return base(`Proposition de vacation — ${companyName}`, `
+    <h1 style="color:white;font-size:22px;margin:0 0 12px;">Proposition de vacation 📋</h1>
+    <p style="color:#94a3b8;font-size:14px;margin:0 0 24px;line-height:1.6;">
+      Bonjour ${agentFirstName},<br><br>
+      <strong style="color:white;">${companyName}</strong> vous propose une vacation.
+      Merci de répondre dès que possible.
+    </p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;border-radius:12px;margin-bottom:28px;">
+      <tr><td style="padding:20px 24px;">
+        <p style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:.08em;margin:0 0 14px;font-weight:600;">Détail de la vacation</p>
+        <table width="100%" cellpadding="0" cellspacing="0">
+          ${row('Date', date)}
+          ${row('Horaires', `${startTime} – ${endTime}`)}
+          ${row('Site', siteName)}
+        </table>
+      </td></tr>
+    </table>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
+      <tr>
+        <td style="padding-right:8px;">
+          <a href="${acceptUrl}" style="display:block;background:#10b981;color:white;text-align:center;padding:14px;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px;">✅ Accepter</a>
+        </td>
+        <td style="padding-left:8px;">
+          <a href="${declineUrl}" style="display:block;background:#ef4444;color:white;text-align:center;padding:14px;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px;">❌ Décliner</a>
+        </td>
+      </tr>
+    </table>
+
+    <p style="color:#475569;font-size:12px;margin:16px 0 0;text-align:center;line-height:1.8;">
+      En acceptant, vous vous engagez à être présent sur ce poste.<br>
+      En cas de problème, contactez votre responsable directement.
+    </p>
+  `);
+}
+
+module.exports = { welcome, trialEnding, paymentSucceeded, paymentFailed, cancellationConfirmed, newFeature, contractSignRequest, clientPortalLink, agentPortalLink, passwordReset, shiftOffer };

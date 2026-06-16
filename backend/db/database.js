@@ -372,6 +372,21 @@ async function init() {
     );
   `);
 
+  // ── Offres de vacation (demandes envoyées aux agents) ────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS shift_offers (
+      id           SERIAL PRIMARY KEY,
+      company_id   INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      shift_id     INTEGER NOT NULL REFERENCES shifts(id) ON DELETE CASCADE,
+      agent_id     INTEGER NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+      token        TEXT NOT NULL UNIQUE,
+      status       TEXT NOT NULL DEFAULT 'pending',
+      sent_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      responded_at TIMESTAMP,
+      UNIQUE(shift_id, agent_id)
+    );
+  `);
+
   console.log('[DB] PostgreSQL connecté — schéma multi-tenant initialisé');
 }
 

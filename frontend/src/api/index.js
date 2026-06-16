@@ -238,6 +238,13 @@ export const checkinApi = {
   checkout: (shiftId, coords) => post(`/shifts/${shiftId}/checkout`, coords),
 };
 
+// Offres de vacation
+export const shiftOffersApi = {
+  send: (data) => post('/shift-offers', data),
+  list: (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/shift-offers${q ? `?${q}` : ''}`); },
+  cancel: (id) => del(`/shift-offers/${id}`),
+};
+
 // Portail client
 export const portalApi = {
   generate: (clientId) => post(`/clients/${clientId}/portal-token`, {}),
