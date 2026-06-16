@@ -419,7 +419,7 @@ function AgentsInner() {
                 const stats = monthStats[agent.id];
                 const totalH = stats ? stats.total_day + stats.total_night + stats.total_sunday : 0;
                 return (
-                  <tr key={agent.id} className="table-row">
+                  <tr key={agent.id} className="table-row cursor-pointer" onDoubleClick={() => setModal({ agent })}>
                     <td className="py-3 px-3">
                       <div className="flex items-center gap-3">
                         {agent.photo ? (
