@@ -66,16 +66,40 @@ router.get('/:token', async (req, res) => {
       [agent.id]
     );
 
+    // Stats du mois courant
+    const monthStart = today.slice(0, 7) + '-01';
+    const stats = await db.get(
+      `SELECT COUNT(*) AS shift_count,
+              ROUND(SUM(
+                CASE WHEN end_time > start_time
+                  THEN (strftime('%H', end_time) * 60 + strftime('%M', end_time)
+                       - strftime('%H', start_time) * 60 - strftime('%M', start_time)) / 60.0
+                  ELSE (24 * 60 - strftime('%H', start_time) * 60 - strftime('%M', start_time)
+                       + strftime('%H', end_time) * 60 + strftime('%M', end_time)) / 60.0
+                END
+              ), 1) AS hours_count
+       FROM shifts WHERE agent_id = ? AND date >= ? AND date <= ?`,
+      [agent.id, monthStart, today.slice(0, 7) + '-31']
+    );
+
     res.json({
       agent: {
         id: agent.id,
         first_name: agent.first_name,
         last_name: agent.last_name,
+        email: agent.email,
+        phone: agent.phone,
+        color: agent.color,
+        contract_type: agent.contract_type,
+        carte_pro: agent.carte_pro,
+        entry_date: agent.entry_date,
+        employee_number: agent.employee_number,
         company_name: agent.company_name,
       },
       shifts,
       offers,
       today,
+      stats: { shift_count: stats?.shift_count || 0, hours_count: stats?.hours_count || 0 },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
