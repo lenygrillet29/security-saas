@@ -248,14 +248,14 @@ function WeeklyView({ days, shifts, absences, agents, onAddShift, onEditShift, o
         <tbody>
           {agents.map((agent, idx) => (
             <tr key={agent.id} className={idx % 2 === 0 ? 'bg-dark-800/30' : ''}>
-              <td className="px-3 py-2 border-b border-dark-600/50">
+              <td
+                className="px-3 py-2 border-b border-dark-600/50 cursor-pointer select-none group"
+                title="Double-clic pour ouvrir la fiche"
+                onDoubleClick={() => onOpenAgent?.(agent)}
+              >
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: agent.color || '#3B82F6' }} />
-                  <span
-                    className="text-xs text-slate-300 font-medium truncate cursor-pointer hover:text-white hover:underline"
-                    title="Double-clic pour ouvrir la fiche"
-                    onDoubleClick={() => onOpenAgent?.(agent)}
-                  >
+                  <span className="text-xs text-slate-300 font-medium truncate group-hover:text-white">
                     {agent.first_name} {agent.last_name}
                   </span>
                 </div>

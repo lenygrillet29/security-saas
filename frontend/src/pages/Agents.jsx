@@ -310,7 +310,7 @@ function AgentsInner() {
   useEffect(() => {
     const openId = location.state?.openAgentId;
     if (!openId || agents.length === 0) return;
-    const agent = agents.find(a => a.id === openId);
+    const agent = agents.find(a => String(a.id) === String(openId));
     if (agent) {
       setModal({ agent });
       // Nettoyer le state pour éviter de ré-ouvrir si on revient
