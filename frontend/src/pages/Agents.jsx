@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, Phone, Mail, Search, Download, Archive, ArchiveRestore, Send, AlertTriangle, Zap, Smartphone, User, MapPin, CreditCard, Shield, CalendarDays, ChevronDown, ChevronUp } from 'lucide-react';
+import { useEffect, useState, useRef } from 'react';
+import { Plus, Edit2, Trash2, Phone, Mail, Search, Download, Archive, ArchiveRestore, Send, AlertTriangle, Zap, Smartphone, User, MapPin, CreditCard, Shield, CalendarDays, ChevronDown, ChevronUp, Camera, X, BadgeCheck } from 'lucide-react';
 import { agentsApi, shiftsApi, pdfApi, emailApi, addonsApi } from '../api';
 import { useNavigate } from 'react-router-dom';
 import Modal from '../components/Modal';
@@ -28,8 +28,79 @@ function FormSection({ icon: Icon, title, color = 'text-blue-400', children, col
   );
 }
 
+function PhotoUpload({ agentId, currentPhoto, onPhotoChange }) {
+  const toast = useToast();
+  const fileRef = useRef();
+  const [preview, setPreview] = useState(currentPhoto || null);
+  const [uploading, setUploading] = useState(false);
+
+  async function handleFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 4 * 1024 * 1024) { toast('Image trop volumineuse (max 4 Mo)', 'error'); return; }
+    setUploading(true);
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const dataUrl = ev.target.result;
+      setPreview(dataUrl);
+      onPhotoChange(dataUrl);
+      if (agentId) {
+        try {
+          await agentsApi.uploadPhoto(agentId, dataUrl);
+          toast('Photo enregistrée');
+        } catch (err) { toast(err.message, 'error'); }
+      }
+      setUploading(false);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function handleDelete() {
+    setPreview(null);
+    onPhotoChange(null);
+    if (agentId) {
+      try { await agentsApi.deletePhoto(agentId); toast('Photo supprimée'); }
+      catch (err) { toast(err.message, 'error'); }
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-5">
+      <div className="relative shrink-0">
+        {preview ? (
+          <img src={preview} alt="Photo agent" className="w-20 h-20 rounded-full object-cover border-2 border-blue-500/50" />
+        ) : (
+          <div className="w-20 h-20 rounded-full bg-dark-700 border-2 border-dashed border-dark-500 flex items-center justify-center">
+            <User className="w-8 h-8 text-slate-600" />
+          </div>
+        )}
+        {preview && (
+          <button type="button" onClick={handleDelete}
+            className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-400 transition-colors">
+            <X className="w-3 h-3 text-white" />
+          </button>
+        )}
+      </div>
+      <div className="space-y-1.5">
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          className="btn-secondary flex items-center gap-2 text-sm py-1.5 px-3"
+        >
+          <Camera className="w-3.5 h-3.5" />
+          {uploading ? 'Chargement…' : preview ? 'Changer la photo' : 'Ajouter une photo'}
+        </button>
+        <p className="text-xs text-slate-600">JPG, PNG, WEBP · max 4 Mo</p>
+        <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleFile} />
+      </div>
+    </div>
+  );
+}
+
 function AgentForm({ agent, onSave, onClose }) {
   const toast = useToast();
+  const [photoData, setPhotoData] = useState(agent?.photo || null);
   const [form, setForm] = useState({
     first_name:      agent?.first_name      || '',
     last_name:       agent?.last_name       || '',
@@ -56,11 +127,16 @@ function AgentForm({ agent, onSave, onClose }) {
   async function handleSubmit(e) {
     e.preventDefault();
     try {
+      const payload = { ...form, photo: photoData };
       if (agent?.id) {
-        await agentsApi.update(agent.id, form);
+        await agentsApi.update(agent.id, payload);
         toast('Agent modifié');
       } else {
-        await agentsApi.create(form);
+        const created = await agentsApi.create(payload);
+        // Upload photo séparément si présente (l'ID n'existe qu'après la création)
+        if (photoData && created?.id) {
+          await agentsApi.uploadPhoto(created.id, photoData).catch(() => {});
+        }
         toast('Agent créé');
       }
       onSave();
@@ -74,6 +150,7 @@ function AgentForm({ agent, onSave, onClose }) {
 
       {/* Identité */}
       <FormSection icon={User} title="Identité" color="text-blue-400">
+        <PhotoUpload agentId={agent?.id} currentPhoto={photoData} onPhotoChange={setPhotoData} />
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="label">Prénom *</label>
@@ -345,10 +422,14 @@ function AgentsInner() {
                   <tr key={agent.id} className="table-row">
                     <td className="py-3 px-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                          style={{ backgroundColor: agent.color || '#3B82F6' }}>
-                          {agent.first_name[0]}{agent.last_name[0]}
-                        </div>
+                        {agent.photo ? (
+                          <img src={agent.photo} alt="" className="w-8 h-8 rounded-full object-cover shrink-0 border border-dark-500" />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+                            style={{ backgroundColor: agent.color || '#3B82F6' }}>
+                            {agent.first_name[0]}{agent.last_name[0]}
+                          </div>
+                        )}
                         <div>
                           <div className="text-sm font-medium text-white">{agent.first_name} {agent.last_name}</div>
                           {agent.employee_number && <div className="text-xs text-slate-500">N° {agent.employee_number}</div>}
@@ -383,6 +464,13 @@ function AgentsInner() {
                     </td>
                     <td className="py-3 px-3">
                       <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => pdfApi.agentBadge(agent.id)}
+                          className="p-1.5 text-slate-400 hover:text-violet-400 hover:bg-violet-600/10 rounded-lg transition-colors"
+                          title="Télécharger badge PDF"
+                        >
+                          <BadgeCheck className="w-3.5 h-3.5" />
+                        </button>
                         <button
                           onClick={() => pdfApi.agentPlanning(agent.id, { start_date: monthStart, end_date: monthEnd })}
                           className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-600/10 rounded-lg transition-colors"

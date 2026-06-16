@@ -118,25 +118,50 @@ router.post('/', requireWriter, async (req, res) => {
 router.put('/:id', requireWriter, async (req, res) => {
   try {
     const { first_name, last_name, email, phone, employee_number, contract_type, hourly_rate, color, active, notes,
-            address, birth_date, birth_place, nationality, carte_vitale, carte_pro, entry_date, exit_date } = req.body;
+            address, birth_date, birth_place, nationality, carte_vitale, carte_pro, entry_date, exit_date, photo } = req.body;
     const existing = await db.get('SELECT * FROM agents WHERE id = ? AND company_id = ?', [req.params.id, req.user.companyId]);
     if (!existing) return res.status(404).json({ error: 'Agent non trouvé' });
     await db.run(
       `UPDATE agents SET first_name=?, last_name=?, email=?, phone=?, employee_number=?, contract_type=?,
        hourly_rate=?, color=?, active=?, notes=?,
        address=?, birth_date=?, birth_place=?, nationality=?,
-       carte_vitale=?, carte_pro=?, entry_date=?, exit_date=?
+       carte_vitale=?, carte_pro=?, entry_date=?, exit_date=?,
+       photo=COALESCE(?, photo)
        WHERE id=?`,
       [first_name, last_name, email || null, phone || null, employee_number || null,
         contract_type || 'CDI', hourly_rate || 0, color || '#3B82F6',
         active !== undefined ? (active ? 1 : 0) : 1, notes || null,
         address || null, birth_date || null, birth_place || null, nationality || null,
         carte_vitale || null, carte_pro || null, entry_date || null, exit_date || null,
+        photo || null,
         req.params.id]
     );
     const agent = await db.get('SELECT * FROM agents WHERE id = ?', [req.params.id]);
     logAudit(req, { action: 'UPDATE', entityType: 'agent', entityId: agent.id, entityName: `${agent.first_name} ${agent.last_name}` });
     res.json(agent);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Photo agent ─────────────────────────────────────────────────────────────
+router.post('/:id/photo', requireWriter, async (req, res) => {
+  try {
+    const { photo } = req.body; // data URL base64
+    if (!photo) return res.status(400).json({ error: 'Photo manquante' });
+    // Limite ~4 Mo en base64
+    if (photo.length > 5_500_000) return res.status(400).json({ error: 'Image trop volumineuse (max 4 Mo)' });
+    const agent = await db.get('SELECT id FROM agents WHERE id = ? AND company_id = ?', [req.params.id, req.user.companyId]);
+    if (!agent) return res.status(404).json({ error: 'Agent non trouvé' });
+    await db.run('UPDATE agents SET photo = ? WHERE id = ?', [photo, req.params.id]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/:id/photo', requireWriter, async (req, res) => {
+  try {
+    const agent = await db.get('SELECT id FROM agents WHERE id = ? AND company_id = ?', [req.params.id, req.user.companyId]);
+    if (!agent) return res.status(404).json({ error: 'Agent non trouvé' });
+    await db.run('UPDATE agents SET photo = NULL WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

@@ -344,6 +344,7 @@ async function init() {
     ALTER TABLE agents ADD COLUMN IF NOT EXISTS carte_pro     TEXT;
     ALTER TABLE agents ADD COLUMN IF NOT EXISTS entry_date    TEXT;
     ALTER TABLE agents ADD COLUMN IF NOT EXISTS exit_date     TEXT;
+    ALTER TABLE agents ADD COLUMN IF NOT EXISTS photo         TEXT;
   `);
 
   // ── Abonnements notifications push agents ────────────────────────────────────

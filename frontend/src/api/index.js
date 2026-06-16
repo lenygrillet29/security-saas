@@ -61,6 +61,8 @@ export const agentsApi = {
   unarchive: (id) => post(`/agents/${id}/unarchive`, {}),
   sendPortal: (id) => post(`/agents/${id}/send-portal`, {}),
   available: (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/agents/available${q ? `?${q}` : ''}`); },
+  uploadPhoto: (id, photo) => post(`/agents/${id}/photo`, { photo }),
+  deletePhoto: (id) => del(`/agents/${id}/photo`),
 };
 
 // Clients
@@ -148,6 +150,10 @@ export const pdfApi = {
   quote: (id) => {
     const token = localStorage.getItem('auth_token');
     window.open(`${BASE}/pdf/quote/${id}?token=${token}`, '_blank');
+  },
+  agentBadge: (id) => {
+    const token = localStorage.getItem('auth_token');
+    window.open(`${BASE}/pdf/badge/${id}?token=${token}`, '_blank');
   },
 };
 

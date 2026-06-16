@@ -378,6 +378,105 @@ function generateQuote(settings, quote, client, site, lines) {
   return doc;
 }
 
+// Badge agent (format carte ID, 243 × 390 pts ≈ 86 × 137 mm)
+function generateAgentBadge(settings, agent) {
+  const W = 244, H = 390;
+  const doc = new PDFDocument({ size: [W, H], margin: 0, bufferPages: true, info: { Creator: 'SecuroPlan' } });
+
+  // Fond dégradé sombre
+  doc.rect(0, 0, W, H).fill('#0F1117');
+
+  // Bande supérieure société
+  doc.rect(0, 0, W, 60).fill('#1A1D2E');
+  doc.fillColor('#3B82F6').fontSize(13).font('Helvetica-Bold')
+     .text(settings.company_name || 'SecuroPlan', 0, 14, { align: 'center', width: W });
+  if (settings.company_cnaps) {
+    doc.fillColor('#64748B').fontSize(7).font('Helvetica')
+       .text(`CNAPS : ${settings.company_cnaps}`, 0, 32, { align: 'center', width: W });
+  }
+  doc.fillColor('#3B82F6').fontSize(8).font('Helvetica-Bold')
+     .text('AGENT DE SÉCURITÉ', 0, 44, { align: 'center', width: W });
+
+  // Photo
+  const photoSize = 90;
+  const photoX = (W - photoSize) / 2;
+  const photoY = 74;
+
+  if (agent.photo) {
+    try {
+      // data URL → Buffer
+      const base64 = agent.photo.replace(/^data:image\/\w+;base64,/, '');
+      const imgBuf = Buffer.from(base64, 'base64');
+      doc.save();
+      // Cercle de découpe
+      doc.circle(photoX + photoSize / 2, photoY + photoSize / 2, photoSize / 2).clip();
+      doc.image(imgBuf, photoX, photoY, { width: photoSize, height: photoSize, cover: [photoSize, photoSize] });
+      doc.restore();
+      // Bordure cercle
+      doc.circle(photoX + photoSize / 2, photoY + photoSize / 2, photoSize / 2)
+         .lineWidth(2).stroke('#3B82F6');
+    } catch (_) {
+      // Fallback avatar initiales
+      drawInitialsAvatar(doc, agent, photoX, photoY, photoSize);
+    }
+  } else {
+    drawInitialsAvatar(doc, agent, photoX, photoY, photoSize);
+  }
+
+  // Nom
+  let y = photoY + photoSize + 14;
+  doc.fillColor('#F1F5F9').fontSize(16).font('Helvetica-Bold')
+     .text(`${agent.first_name} ${agent.last_name}`.toUpperCase(), 0, y, { align: 'center', width: W });
+  y += 22;
+
+  // Matricule
+  if (agent.employee_number) {
+    doc.fillColor('#64748B').fontSize(8).font('Helvetica')
+       .text(`N° Matricule : ${agent.employee_number}`, 0, y, { align: 'center', width: W });
+    y += 14;
+  }
+
+  // Ligne séparatrice
+  y += 4;
+  doc.rect(20, y, W - 40, 1).fill('#2D3555');
+  y += 10;
+
+  // Infos clés
+  const rows = [
+    agent.carte_pro    && ['Carte Pro CNAPS', agent.carte_pro],
+    agent.contract_type && ['Contrat', agent.contract_type],
+    agent.entry_date   && ['Entrée', formatDate(agent.entry_date)],
+    agent.exit_date    && ['Sortie', formatDate(agent.exit_date)],
+    agent.nationality  && ['Nationalité', agent.nationality],
+  ].filter(Boolean);
+
+  for (const [label, val] of rows) {
+    if (y > H - 60) break;
+    doc.fillColor('#64748B').fontSize(7).font('Helvetica').text(label, 20, y);
+    doc.fillColor('#E2E8F0').fontSize(8).font('Helvetica-Bold').text(val, 110, y, { width: W - 130 });
+    y += 14;
+  }
+
+  // QR-code fictif ou pied de page
+  y = H - 44;
+  doc.rect(0, y, W, 44).fill('#1A1D2E');
+  const legalLine = [settings.company_name, settings.company_siret && `SIRET ${settings.company_siret}`].filter(Boolean).join(' · ');
+  doc.fillColor('#475569').fontSize(6.5).font('Helvetica')
+     .text(legalLine, 10, y + 8, { width: W - 20, align: 'center', lineBreak: false });
+  doc.fillColor('#334155').fontSize(6).font('Helvetica')
+     .text(`Document généré par SecuroPlan — ${new Date().toLocaleDateString('fr-FR')}`, 10, y + 22, { width: W - 20, align: 'center' });
+
+  return doc;
+}
+
+function drawInitialsAvatar(doc, agent, x, y, size) {
+  doc.circle(x + size / 2, y + size / 2, size / 2).fill('#1E3A5F');
+  doc.circle(x + size / 2, y + size / 2, size / 2).lineWidth(2).stroke('#3B82F6');
+  const initials = `${agent.first_name?.[0] || ''}${agent.last_name?.[0] || ''}`.toUpperCase();
+  doc.fillColor('#93C5FD').fontSize(size * 0.35).font('Helvetica-Bold')
+     .text(initials, x, y + size * 0.3, { width: size, align: 'center' });
+}
+
 // Facture
 function generateInvoice(settings, invoice, client, lines) {
   const doc = createDoc();
@@ -497,4 +596,5 @@ module.exports = {
   generateClientPlanning,
   generateQuote,
   generateInvoice,
+  generateAgentBadge,
 };

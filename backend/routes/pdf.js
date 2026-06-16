@@ -7,6 +7,7 @@ const {
   generateClientPlanning,
   generateQuote,
   generateInvoice,
+  generateAgentBadge,
 } = require('../utils/pdfGenerator');
 
 async function getSettings(companyId) {
@@ -93,6 +94,17 @@ router.get('/quote/:id', async (req, res) => {
     const settings = await getSettings(req.user.companyId);
     const doc = generateQuote(settings, quote, client, site, lines);
     streamPdf(res, doc, `devis_${quote.quote_number || quote.id}.pdf`);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Badge agent ──────────────────────────────────────────────────────────────
+router.get('/badge/:id', async (req, res) => {
+  try {
+    const agent = await db.get('SELECT * FROM agents WHERE id = ? AND company_id = ?', [req.params.id, req.user.companyId]);
+    if (!agent) return res.status(404).json({ error: 'Agent non trouvé' });
+    const settings = await getSettings(req.user.companyId);
+    const doc = generateAgentBadge(settings, agent);
+    streamPdf(res, doc, `badge_${agent.last_name}_${agent.first_name}.pdf`);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
