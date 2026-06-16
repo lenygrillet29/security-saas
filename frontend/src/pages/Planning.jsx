@@ -5,17 +5,111 @@ import {
   eachDayOfInterval, isSameDay, parseISO, getDay
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Plus, Download, Mail, Trash2, Edit2, Send, Users } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Download, Mail, Trash2, Edit2, Send, Users, AlertTriangle, RefreshCw, X, ExternalLink } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { shiftsApi, agentsApi, sitesApi, absencesApi, pdfApi, emailApi } from '../api';
+import { shiftsApi, agentsApi, sitesApi, clientsApi, absencesApi, pdfApi, emailApi } from '../api';
 import Modal from '../components/Modal';
 import Confirm from '../components/Confirm';
 import { ToastProvider, useToast } from '../components/Toast';
 
 const DAY_LABELS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
 
-function ShiftForm({ shift, agents, sites, onSave, onClose }) {
+function QuickClientModal({ onClose, onCreated }) {
   const toast = useToast();
+  const [name, setName] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      const client = await clientsApi.create({ name });
+      toast(`Client "${name}" créé`);
+      onCreated(client);
+      onClose();
+    } catch (err) {
+      toast(err.message, 'error');
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal title="Nouveau client" onClose={onClose} size="sm">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="label">Nom du client *</label>
+          <input className="input" autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="Ex : Mairie de Lyon" required />
+        </div>
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn-secondary" onClick={onClose}>Annuler</button>
+          <button type="submit" className="btn-primary" disabled={saving}>
+            {saving ? 'Création...' : 'Créer le client'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function QuickSiteModal({ onClose, onCreated, defaultClientId }) {
+  const toast = useToast();
+  const [clients, setClients] = useState([]);
+  const [form, setForm] = useState({ name: '', client_id: defaultClientId || '', address: '' });
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  useEffect(() => {
+    clientsApi.list().then(setClients).catch(() => {});
+  }, []);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!form.name.trim() || !form.client_id) return;
+    setSaving(true);
+    try {
+      const site = await sitesApi.create(form);
+      toast(`Site "${form.name}" créé`);
+      onCreated(site);
+      onClose();
+    } catch (err) {
+      toast(err.message, 'error');
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal title="Nouveau site" onClose={onClose} size="sm">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="label">Client *</label>
+          <select className="input" value={form.client_id} onChange={e => set('client_id', e.target.value)} required>
+            <option value="">Sélectionner...</option>
+            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="label">Nom du site *</label>
+          <input className="input" autoFocus value={form.name} onChange={e => set('name', e.target.value)} placeholder="Ex : Siège social" required />
+        </div>
+        <div>
+          <label className="label">Adresse</label>
+          <input className="input" value={form.address} onChange={e => set('address', e.target.value)} placeholder="Ex : 12 rue de la Paix, Paris" />
+        </div>
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn-secondary" onClick={onClose}>Annuler</button>
+          <button type="submit" className="btn-primary" disabled={saving}>
+            {saving ? 'Création...' : 'Créer le site'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function ShiftForm({ shift, agents, sites: initialSites, onSave, onClose }) {
+  const toast = useToast();
+  const [sites, setSites] = useState(initialSites);
   const [form, setForm] = useState({
     agent_id: shift?.agent_id || '',
     site_id: shift?.site_id || '',
@@ -24,17 +118,20 @@ function ShiftForm({ shift, agents, sites, onSave, onClose }) {
     end_time: shift?.end_time || '20:00',
     notes: shift?.notes || '',
   });
+  const [quickClient, setQuickClient] = useState(false);
+  const [quickSite, setQuickSite] = useState(false);
 
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   async function handleSubmit(e) {
     e.preventDefault();
+    const payload = { ...form, agent_id: form.agent_id || null };
     try {
       if (shift?.id) {
-        await shiftsApi.update(shift.id, form);
+        await shiftsApi.update(shift.id, payload);
         toast('Shift modifié avec succès');
       } else {
-        await shiftsApi.create(form);
+        await shiftsApi.create(payload);
         toast('Shift créé avec succès');
       }
       onSave();
@@ -43,53 +140,91 @@ function ShiftForm({ shift, agents, sites, onSave, onClose }) {
     }
   }
 
+  async function handleClientCreated() {
+    // Rafraîchir les sites après création d'un client
+    const updated = await sitesApi.list().catch(() => sites);
+    setSites(updated);
+  }
+
+  async function handleSiteCreated(newSite) {
+    const updated = await sitesApi.list().catch(() => sites);
+    setSites(updated);
+    // Sélectionner automatiquement le nouveau site
+    set('site_id', String(newSite.id));
+  }
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="label">Agent *</label>
-          <select className="input" value={form.agent_id} onChange={e => set('agent_id', e.target.value)} required>
-            <option value="">Sélectionner...</option>
-            {agents.map(a => (
-              <option key={a.id} value={a.id}>{a.first_name} {a.last_name}</option>
-            ))}
-          </select>
+    <>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="label">Agent <span className="text-slate-500 font-normal">(optionnel)</span></label>
+            <select className="input" value={form.agent_id} onChange={e => set('agent_id', e.target.value)}>
+              <option value="">— Poste non affecté —</option>
+              {agents.map(a => (
+                <option key={a.id} value={a.id}>{a.first_name} {a.last_name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Site *</label>
+            <div className="flex gap-2 mb-1.5">
+              <button type="button" onClick={() => setQuickClient(true)}
+                className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg border border-dashed border-blue-500/50 text-xs text-blue-400 hover:bg-blue-600/10 hover:border-blue-400 transition-colors">
+                <Plus className="w-3.5 h-3.5" /> Nouveau client
+              </button>
+              <button type="button" onClick={() => setQuickSite(true)}
+                className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg border border-dashed border-blue-500/50 text-xs text-blue-400 hover:bg-blue-600/10 hover:border-blue-400 transition-colors">
+                <Plus className="w-3.5 h-3.5" /> Nouveau site
+              </button>
+            </div>
+            <select className="input" value={form.site_id} onChange={e => set('site_id', e.target.value)} required>
+              <option value="">Sélectionner...</option>
+              {sites.map(s => (
+                <option key={s.id} value={s.id}>{s.name} — {s.client_name}</option>
+              ))}
+            </select>
+          </div>
         </div>
         <div>
-          <label className="label">Site *</label>
-          <select className="input" value={form.site_id} onChange={e => set('site_id', e.target.value)} required>
-            <option value="">Sélectionner...</option>
-            {sites.map(s => (
-              <option key={s.id} value={s.id}>{s.name} — {s.client_name}</option>
-            ))}
-          </select>
+          <label className="label">Date *</label>
+          <input type="date" className="input" value={form.date} onChange={e => set('date', e.target.value)} required />
         </div>
-      </div>
-      <div>
-        <label className="label">Date *</label>
-        <input type="date" className="input" value={form.date} onChange={e => set('date', e.target.value)} required />
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="label">Heure début *</label>
-          <input type="time" className="input" value={form.start_time} onChange={e => set('start_time', e.target.value)} required />
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="label">Heure début *</label>
+            <input type="time" className="input" value={form.start_time} onChange={e => set('start_time', e.target.value)} required />
+          </div>
+          <div>
+            <label className="label">Heure fin *</label>
+            <input type="time" className="input" value={form.end_time} onChange={e => set('end_time', e.target.value)} required />
+          </div>
         </div>
         <div>
-          <label className="label">Heure fin *</label>
-          <input type="time" className="input" value={form.end_time} onChange={e => set('end_time', e.target.value)} required />
+          <label className="label">Notes</label>
+          <textarea className="input" rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} />
         </div>
-      </div>
-      <div>
-        <label className="label">Notes</label>
-        <textarea className="input" rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} />
-      </div>
-      <div className="flex justify-end gap-2 pt-2">
-        <button type="button" className="btn-secondary" onClick={onClose}>Annuler</button>
-        <button type="submit" className="btn-primary">
-          {shift?.id ? 'Modifier' : 'Créer le shift'}
-        </button>
-      </div>
-    </form>
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" className="btn-secondary" onClick={onClose}>Annuler</button>
+          <button type="submit" className="btn-primary">
+            {shift?.id ? 'Modifier' : 'Créer le shift'}
+          </button>
+        </div>
+      </form>
+
+      {quickClient && (
+        <QuickClientModal
+          onClose={() => setQuickClient(false)}
+          onCreated={handleClientCreated}
+        />
+      )}
+      {quickSite && (
+        <QuickSiteModal
+          onClose={() => setQuickSite(false)}
+          onCreated={handleSiteCreated}
+        />
+      )}
+    </>
   );
 }
 
@@ -206,10 +341,106 @@ function ExportModal({ onClose, agents, sites }) {
   );
 }
 
+// ——— Replacement Modal ———
+function ReplacementModal({ shift, onClose, onReplaced, toast }) {
+  const [loading, setLoading] = useState(true);
+  const [available, setAvailable] = useState([]);
+  const [replacing, setReplacing] = useState(null);
+  const isUnassigned = !shift.agent_name;
+
+  useEffect(() => {
+    shiftsApi.replacements(shift.id)
+      .then(data => { setAvailable(data.available || []); setLoading(false); })
+      .catch(err => { toast(err.message, 'error'); onClose(); });
+  }, [shift.id]);
+
+  async function handleReplace(agent) {
+    setReplacing(agent.id);
+    try {
+      await shiftsApi.update(shift.id, {
+        agent_id: agent.id,
+        site_id: shift.site_id,
+        date: shift.date,
+        start_time: shift.start_time,
+        end_time: shift.end_time,
+        notes: shift.notes || '',
+      });
+      toast(`Shift ${isUnassigned ? 'affecté' : 'réaffecté'} à ${agent.first_name} ${agent.last_name}`);
+      onReplaced();
+      onClose();
+    } catch (err) {
+      toast(err.message, 'error');
+      setReplacing(null);
+    }
+  }
+
+  return (
+    <Modal title={isUnassigned ? 'Affecter un agent' : 'Proposer un remplaçant'} onClose={onClose} size="sm">
+      <div className="space-y-3">
+        <div className={`border rounded-lg p-3 text-sm ${isUnassigned ? 'bg-blue-600/10 border-blue-600/30 text-blue-300' : 'bg-amber-600/10 border-amber-600/30 text-amber-300'}`}>
+          <div className="font-medium mb-1">{isUnassigned ? 'Poste à pourvoir' : 'Shift concerné'}</div>
+          <div className="text-xs text-slate-400">
+            {shift.agent_name ? `${shift.agent_name} — ` : ''}{shift.site_name}<br/>
+            {shift.date} · {shift.start_time}–{shift.end_time}
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="text-center py-6 text-slate-400 text-sm">Recherche des agents disponibles...</div>
+        ) : available.length === 0 ? (
+          <div className="text-center py-6 text-slate-400 text-sm">
+            <RefreshCw className="w-8 h-8 mx-auto mb-2 opacity-30" />
+            Aucun agent disponible sur ce créneau.
+          </div>
+        ) : (
+          <div>
+            <p className="text-xs text-slate-400 mb-2">{available.length} agent{available.length > 1 ? 's' : ''} disponible{available.length > 1 ? 's' : ''} — cliquez pour {isUnassigned ? 'affecter' : 'réaffecter'} :</p>
+            <div className="space-y-1.5 max-h-60 overflow-y-auto">
+              {available.map(agent => (
+                <button
+                  key={agent.id}
+                  onClick={() => handleReplace(agent)}
+                  disabled={replacing === agent.id}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-dark-700 hover:bg-blue-600/20 border border-dark-500 hover:border-blue-500/50 transition-colors text-left group"
+                >
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+                    style={{ backgroundColor: agent.color || '#3B82F6' }}>
+                    {agent.first_name[0]}{agent.last_name[0]}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-white group-hover:text-blue-300">
+                      {agent.first_name} {agent.last_name}
+                    </div>
+                    {agent.contract_type && (
+                      <div className="text-xs text-slate-500">{agent.contract_type}</div>
+                    )}
+                  </div>
+                  {replacing === agent.id ? (
+                    <RefreshCw className="w-4 h-4 text-blue-400 animate-spin shrink-0" />
+                  ) : (
+                    <span className="text-xs text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">Affecter →</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-end pt-1">
+          <button className="btn-secondary" onClick={onClose}>Fermer</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ——— Weekly View ———
-function WeeklyView({ days, shifts, absences, agents, onAddShift, onEditShift, onDeleteShift, onOpenAgent }) {
+function WeeklyView({ days, shifts, absences, agents, onAddShift, onEditShift, onDeleteShift, onOpenAgent, onReplaceShift }) {
   const getShiftsForDay = (day, agentId) =>
-    shifts.filter(s => isSameDay(parseISO(s.date), day) && s.agent_id === agentId);
+    shifts.filter(s => isSameDay(parseISO(s.date), day) && String(s.agent_id) === String(agentId));
+
+  const getUnassignedForDay = (day) =>
+    shifts.filter(s => isSameDay(parseISO(s.date), day) && !s.agent_id);
 
   const getAbsencesForDay = (day, agentId) =>
     absences.filter(a => {
@@ -264,33 +495,52 @@ function WeeklyView({ days, shifts, absences, agents, onAddShift, onEditShift, o
                 const isSun = getDay(day) === 0;
                 const dayShifts = getShiftsForDay(day, agent.id);
                 const dayAbsences = getAbsencesForDay(day, agent.id);
+                const conflict = dayAbsences.length > 0 && dayShifts.length > 0;
                 return (
                   <td key={day.toISOString()} className={`px-1 py-1.5 border-b border-dark-600/50 align-top ${
                     isSun ? 'bg-amber-900/5' : ''
-                  }`}>
+                  } ${conflict ? 'bg-red-900/10' : ''}`}>
                     <div className="space-y-0.5 min-h-[32px]">
                       {dayAbsences.map(ab => (
                         <div key={ab.id} className={`shift-chip border ${ABSENCE_COLORS[ab.type] || ABSENCE_COLORS.autre}`}>
                           {ABSENCE_LABELS[ab.type] || 'Absence'}
                         </div>
                       ))}
-                      {dayShifts.map(shift => (
-                        <div
-                          key={shift.id}
-                          className="shift-chip border border-white/10 flex items-center justify-between group"
-                          style={{ backgroundColor: (agent.color || '#3B82F6') + '33', color: agent.color || '#3B82F6' }}
-                        >
-                          <span>{shift.start_time}–{shift.end_time}</span>
-                          <div className="hidden group-hover:flex gap-0.5 ml-1">
-                            <button onClick={() => onEditShift(shift)} className="hover:text-white p-0.5 rounded">
-                              <Edit2 className="w-2.5 h-2.5" />
-                            </button>
-                            <button onClick={() => onDeleteShift(shift.id)} className="hover:text-red-400 p-0.5 rounded">
-                              <Trash2 className="w-2.5 h-2.5" />
-                            </button>
+                      {dayShifts.map(shift => {
+                        const shiftConflict = dayAbsences.length > 0;
+                        return (
+                          <div
+                            key={shift.id}
+                            className={`shift-chip border flex items-center justify-between group ${
+                              shiftConflict
+                                ? 'border-amber-500/50 bg-amber-900/30 text-amber-300'
+                                : 'border-white/10'
+                            }`}
+                            style={shiftConflict ? {} : { backgroundColor: (agent.color || '#3B82F6') + '33', color: agent.color || '#3B82F6' }}
+                          >
+                            <span className="flex items-center gap-1">
+                              {shiftConflict && (
+                                <button
+                                  title="Agent absent — cliquer pour trouver un remplaçant"
+                                  onClick={() => onReplaceShift?.({ ...shift, agent_name: `${agent.first_name} ${agent.last_name}` })}
+                                  className="text-amber-400 hover:text-amber-300 transition-colors"
+                                >
+                                  <AlertTriangle className="w-2.5 h-2.5" />
+                                </button>
+                              )}
+                              {shift.start_time}–{shift.end_time}
+                            </span>
+                            <div className="hidden group-hover:flex gap-0.5 ml-1">
+                              <button onClick={() => onEditShift(shift)} className="hover:text-white p-0.5 rounded">
+                                <Edit2 className="w-2.5 h-2.5" />
+                              </button>
+                              <button onClick={() => onDeleteShift(shift.id)} className="hover:text-red-400 p-0.5 rounded">
+                                <Trash2 className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                       <button
                         onClick={() => onAddShift(agent.id, day)}
                         className="w-full text-left px-1 py-0.5 rounded text-xs text-slate-600 hover:text-blue-400 hover:bg-blue-600/10 transition-colors"
@@ -303,6 +553,63 @@ function WeeklyView({ days, shifts, absences, agents, onAddShift, onEditShift, o
               })}
             </tr>
           ))}
+
+          {/* ——— Ligne "Postes à pourvoir" (shifts sans agent) ——— */}
+          {(() => {
+            const hasUnassigned = days.some(day => getUnassignedForDay(day).length > 0);
+            if (!hasUnassigned) return null;
+            return (
+              <tr className="bg-slate-800/40 border-t-2 border-slate-600/50">
+                <td className="px-3 py-2 border-b border-dark-600/50">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full shrink-0 bg-slate-500" />
+                    <span className="text-xs text-slate-400 font-medium italic">Postes à pourvoir</span>
+                  </div>
+                </td>
+                {days.map(day => {
+                  const isSun = getDay(day) === 0;
+                  const dayShifts = getUnassignedForDay(day);
+                  return (
+                    <td key={day.toISOString()} className={`px-1 py-1.5 border-b border-dark-600/50 align-top ${isSun ? 'bg-amber-900/5' : ''}`}>
+                      <div className="space-y-0.5 min-h-[32px]">
+                        {dayShifts.map(shift => (
+                          <div
+                            key={shift.id}
+                            className="shift-chip border border-slate-500/40 bg-slate-700/40 text-slate-300 flex items-center justify-between group"
+                          >
+                            <span className="flex items-center gap-1">
+                              <button
+                                title="Affecter un agent disponible"
+                                onClick={() => onReplaceShift?.({ ...shift, agent_name: null })}
+                                className="text-slate-400 hover:text-blue-400 transition-colors"
+                              >
+                                <Users className="w-2.5 h-2.5" />
+                              </button>
+                              {shift.start_time}–{shift.end_time}
+                            </span>
+                            <div className="hidden group-hover:flex gap-0.5 ml-1">
+                              <button onClick={() => onEditShift(shift)} className="hover:text-white p-0.5 rounded">
+                                <Edit2 className="w-2.5 h-2.5" />
+                              </button>
+                              <button onClick={() => onDeleteShift(shift.id)} className="hover:text-red-400 p-0.5 rounded">
+                                <Trash2 className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                        <button
+                          onClick={() => onAddShift(null, day)}
+                          className="w-full text-left px-1 py-0.5 rounded text-xs text-slate-600 hover:text-blue-400 hover:bg-blue-600/10 transition-colors"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })()}
         </tbody>
       </table>
     </div>
@@ -378,18 +685,25 @@ function MonthlyView({ currentDate, shifts, absences, agents, onAddShift, onEdit
                       );
                     })}
                     {dayShifts.slice(0, 3).map(shift => {
-                      const a = agentMap[shift.agent_id];
+                      const a = shift.agent_id ? agentMap[shift.agent_id] : null;
+                      const unassigned = !shift.agent_id;
                       return (
                         <div
                           key={shift.id}
-                          className="shift-chip border border-white/10 group flex items-center justify-between"
-                          style={{
+                          className={`shift-chip group flex items-center justify-between ${
+                            unassigned
+                              ? 'border border-slate-500/40 bg-slate-700/40 text-slate-400 italic'
+                              : 'border border-white/10'
+                          }`}
+                          style={unassigned ? {} : {
                             backgroundColor: (a?.color || '#3B82F6') + '33',
                             color: a?.color || '#3B82F6'
                           }}
                           onClick={() => onEditShift(shift)}
                         >
-                          <span className="truncate">{a ? `${a.first_name[0]}. ${a.last_name}` : '?'}</span>
+                          <span className="truncate">
+                            {unassigned ? `À pourvoir` : a ? `${a.first_name[0]}. ${a.last_name}` : shift.agent_first_name ? `${shift.agent_first_name[0]}. ${shift.agent_last_name}` : '?'}
+                          </span>
                           <span className="ml-1 opacity-70 shrink-0">{shift.start_time}</span>
                         </div>
                       );
@@ -421,6 +735,7 @@ function PlanningInner() {
   const [shiftModal, setShiftModal] = useState(null); // null | { shift?, agentId?, date? }
   const [deleteId, setDeleteId] = useState(null);
   const [exportModal, setExportModal] = useState(false);
+  const [replacementShift, setReplacementShift] = useState(null); // shift to find replacement for
   const [loading, setLoading] = useState(false);
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
@@ -553,6 +868,7 @@ function PlanningInner() {
             onEditShift={openEdit}
             onDeleteShift={setDeleteId}
             onOpenAgent={agent => navigate('/agents', { state: { openAgentId: agent.id } })}
+            onReplaceShift={setReplacementShift}
           />
         ) : (
           <MonthlyView
@@ -593,6 +909,15 @@ function PlanningInner() {
           onClose={() => setExportModal(false)}
           agents={agents}
           sites={sites}
+        />
+      )}
+
+      {replacementShift && (
+        <ReplacementModal
+          shift={replacementShift}
+          onClose={() => setReplacementShift(null)}
+          onReplaced={fetchData}
+          toast={toast}
         />
       )}
     </div>

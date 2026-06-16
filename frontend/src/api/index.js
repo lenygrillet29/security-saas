@@ -97,6 +97,7 @@ export const shiftsApi = {
     const q = new URLSearchParams(params).toString();
     return get(`/shifts/stats/summary${q ? `?${q}` : ''}`);
   },
+  replacements: (id) => get(`/shifts/${id}/replacements`),
 };
 
 // Absences

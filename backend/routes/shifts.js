@@ -10,7 +10,7 @@ const SHIFTS_QUERY = `
     s.name as site_name, s.client_id,
     c.name as client_name
   FROM shifts sh
-  JOIN agents a ON sh.agent_id = a.id
+  LEFT JOIN agents a ON sh.agent_id = a.id
   JOIN sites s ON sh.site_id = s.id
   JOIN clients c ON s.client_id = c.id
 `;
@@ -131,6 +131,50 @@ router.get('/recap', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── Remplaçants disponibles pour un shift ────────────────────────────────────
+// Retourne les agents actifs qui :
+//   1. ne sont pas en absence sur la date du shift
+//   2. n'ont pas déjà un autre shift qui chevauche les horaires
+router.get('/:id/replacements', async (req, res) => {
+  try {
+    const shift = await db.get(
+      'SELECT * FROM shifts WHERE id = ? AND company_id = ?',
+      [req.params.id, req.user.companyId]
+    );
+    if (!shift) return res.status(404).json({ error: 'Shift non trouvé' });
+
+    // Agents sans absence ce jour-là (exclure l'agent actuel seulement s'il y en a un)
+    const excludeClause = shift.agent_id ? 'AND a.id != ?' : '';
+    const baseParams = shift.agent_id
+      ? [req.user.companyId, shift.agent_id, shift.date, shift.date]
+      : [req.user.companyId, shift.date, shift.date];
+
+    const noAbsence = await db.all(`
+      SELECT a.id, a.first_name, a.last_name, a.color, a.phone, a.email, a.employee_number
+      FROM agents a
+      WHERE a.company_id = ? AND a.active = 1 ${excludeClause}
+        AND NOT EXISTS (
+          SELECT 1 FROM absences ab
+          WHERE ab.agent_id = a.id
+            AND ab.start_date <= ? AND ab.end_date >= ?
+        )
+    `, baseParams);
+
+    // Parmi eux, exclure ceux ayant déjà un shift qui se chevauche
+    const available = [];
+    for (const agent of noAbsence) {
+      const overlap = await db.get(`
+        SELECT 1 FROM shifts
+        WHERE agent_id = ? AND date = ? AND id != ?
+          AND NOT (end_time <= ? OR start_time >= ?)
+      `, [agent.id, shift.date, shift.id, shift.start_time, shift.end_time]);
+      if (!overlap) available.push(agent);
+    }
+
+    res.json({ shift, available });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/', async (req, res) => {
   try {
     const { agent_id, site_id, client_id, start_date, end_date } = req.query;
@@ -159,7 +203,7 @@ router.get('/:id', async (req, res) => {
 router.post('/', requireWriter, async (req, res) => {
   try {
     const { agent_id, site_id, date, start_time, end_time, notes } = req.body;
-    if (!agent_id || !site_id || !date || !start_time || !end_time)
+    if (!site_id || !date || !start_time || !end_time)
       return res.status(400).json({ error: 'Champs requis manquants' });
 
     const hours = calculateHours(date, start_time, end_time);
@@ -168,7 +212,7 @@ router.post('/', requireWriter, async (req, res) => {
         hours_day, hours_night, hours_sunday, hours_sunday_night,
         hours_holiday, hours_holiday_night, hours_holiday_sunday_day, hours_holiday_sunday_night, notes)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [req.user.companyId, agent_id, site_id, date, start_time, end_time,
+      [req.user.companyId, agent_id || null, site_id, date, start_time, end_time,
         hours.hours_day, hours.hours_night, hours.hours_sunday, hours.hours_sunday_night,
         hours.hours_holiday, hours.hours_holiday_night,
         hours.hours_holiday_sunday_day, hours.hours_holiday_sunday_night, notes || null]
@@ -189,7 +233,7 @@ router.put('/:id', requireWriter, async (req, res) => {
        hours_day=?, hours_night=?, hours_sunday=?, hours_sunday_night=?,
        hours_holiday=?, hours_holiday_night=?, hours_holiday_sunday_day=?, hours_holiday_sunday_night=?,
        notes=? WHERE id=?`,
-      [agent_id, site_id, date, start_time, end_time,
+      [agent_id || null, site_id, date, start_time, end_time,
         hours.hours_day, hours.hours_night, hours.hours_sunday, hours.hours_sunday_night,
         hours.hours_holiday, hours.hours_holiday_night,
         hours.hours_holiday_sunday_day, hours.hours_holiday_sunday_night,
