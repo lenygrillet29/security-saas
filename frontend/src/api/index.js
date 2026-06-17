@@ -263,6 +263,16 @@ export const expensesApi = {
   reject:  (id, reason) => post(`/expenses/${id}/reject`, { reason }),
 };
 
+// Documents agents
+export const agentDocumentsApi = {
+  list:   (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/agent-documents${q ? `?${q}` : ''}`); },
+  alerts: () => get('/agent-documents/alerts'),
+  stats:  () => get('/agent-documents/stats'),
+  create: (data) => post('/agent-documents', data),
+  update: (id, data) => put(`/agent-documents/${id}`, data),
+  delete: (id) => del(`/agent-documents/${id}`),
+};
+
 // Incidents
 export const incidentsApi = {
   list:   (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/incidents${q ? `?${q}` : ''}`); },

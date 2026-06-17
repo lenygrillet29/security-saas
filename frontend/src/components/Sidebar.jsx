@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Calendar, Users, Building2,
   MapPin, FileText, Settings, Shield, ClipboardList,
-  LogOut, ChevronDown, CreditCard, ScrollText, Receipt, Activity, TrendingUp, Calculator, X, Download, Clock, Wallet, Sun, BarChart3, Package, GraduationCap, Siren,
+  LogOut, ChevronDown, CreditCard, ScrollText, Receipt, Activity, TrendingUp, Calculator, X, Download, Clock, Wallet, Sun, BarChart3, Package, GraduationCap, Siren, FolderOpen,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
@@ -23,7 +23,8 @@ const NAV = [
   { to: '/rh',          icon: BarChart3, label: 'Tableau RH' },
   { to: '/equipements', icon: Package,       label: 'Équipements' },
   { to: '/formations',  icon: GraduationCap, label: 'Formations' },
-  { to: '/incidents',   icon: Siren,         label: 'Incidents' },
+  { to: '/incidents',   icon: Siren,       label: 'Incidents' },
+  { to: '/documents',   icon: FolderOpen,  label: 'Documents' },
   { to: '/audit',      icon: Activity,    label: 'Journal d\'audit' },
   { to: '/simulation', icon: TrendingUp,  label: 'Simulation marge' },
   { to: '/chiffrage',  icon: Calculator,  label: 'Chiffrage', badge: 'Pro' },

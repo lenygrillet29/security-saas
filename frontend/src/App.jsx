@@ -24,6 +24,7 @@ import RHDashboard from './pages/RHDashboard';
 import Equipements from './pages/Equipements';
 import Formations from './pages/Formations';
 import Incidents from './pages/Incidents';
+import Documents from './pages/Documents';
 import AuditLog from './pages/AuditLog';
 import Simulation from './pages/Simulation';
 import RecapHeures from './pages/RecapHeures';
@@ -107,6 +108,7 @@ export default function App() {
               <Route path="equipements" element={<Equipements />} />
               <Route path="formations"  element={<Formations />} />
               <Route path="incidents"   element={<Incidents />} />
+              <Route path="documents"   element={<Documents />} />
               <Route path="audit"     element={<AuditLog />} />
               <Route path="simulation" element={<Simulation />} />
               <Route path="recap-heures" element={<RecapHeures />} />

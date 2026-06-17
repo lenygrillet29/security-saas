@@ -443,6 +443,24 @@ async function init() {
     );
   `);
 
+  // ── Documents agents ──────────────────────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS agent_documents (
+      id           SERIAL PRIMARY KEY,
+      company_id   INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      agent_id     INTEGER NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+      type         TEXT NOT NULL DEFAULT 'autre',
+      label        TEXT NOT NULL,
+      reference    TEXT,
+      issued_date  TEXT,
+      expiry_date  TEXT,
+      issuer       TEXT,
+      file_url     TEXT,
+      notes        TEXT,
+      created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   // ── Incidents sur sites ────────────────────────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS incidents (
