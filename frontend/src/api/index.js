@@ -238,6 +238,11 @@ export const invoicesApi = {
   statsCA: () => get('/invoices/stats/ca'),
 };
 
+// Tableau de bord RH
+export const rhApi = {
+  dashboard: (month) => get(`/rh/dashboard${month ? `?month=${month}` : ''}`),
+};
+
 // Congés payés
 export const cpApi = {
   balances:            () => get('/cp/balances'),

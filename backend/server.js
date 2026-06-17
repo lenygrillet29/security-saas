@@ -110,6 +110,7 @@ app.use('/api/client-contracts', require('./routes/client-contracts')); // CRUD 
 app.use('/api/invoices',  require('./routes/invoices'));  // Facturation
 app.use('/api/expenses',  require('./routes/expenses'));  // Notes de frais
 app.use('/api/cp',        require('./routes/cp'));        // Congés payés
+app.use('/api/rh',        require('./routes/rh'));        // Tableau de bord RH
 app.use('/api/audit',    require('./routes/audit'));     // Journal d'audit
 app.use('/api/export',   require('./routes/export'));    // Export CSV comptable
 app.use('/api/addons',       require('./routes/addons'));        // Add-ons payants
