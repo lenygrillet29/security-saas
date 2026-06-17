@@ -205,6 +205,8 @@ export const invoicesApi = {
   update: (id, data) => put(`/invoices/${id}`, data),
   delete: (id) => del(`/invoices/${id}`),
   fromQuote: (quoteId) => post(`/invoices/from-quote/${quoteId}`, {}),
+  previewPlanning: (params) => { const q = new URLSearchParams(params).toString(); return get(`/invoices/preview-planning?${q}`); },
+  fromPlanning: (data) => post('/invoices/from-planning', data),
 };
 
 // Audit

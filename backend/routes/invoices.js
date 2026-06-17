@@ -31,6 +31,99 @@ router.get('/', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── GET aperçu planning → lignes de facture ─────────────────────────────────
+// GET /api/invoices/preview-planning?client_id=X&date_from=Y&date_to=Z
+router.get('/preview-planning', async (req, res) => {
+  try {
+    const { client_id, date_from, date_to } = req.query;
+    if (!client_id || !date_from || !date_to) return res.status(400).json({ error: 'client_id, date_from, date_to requis' });
+
+    const shifts = await db.all(
+      `SELECT sh.id, sh.date, sh.start_time, sh.end_time,
+              s.id AS site_id, s.name AS site_name, s.hourly_rate_day,
+              a.first_name || ' ' || a.last_name AS agent_name
+       FROM shifts sh
+       JOIN sites s   ON s.id = sh.site_id
+       JOIN clients c ON c.id = s.client_id
+       LEFT JOIN agents a ON a.id = sh.agent_id
+       WHERE sh.company_id = ? AND c.id = ? AND sh.date >= ? AND sh.date <= ?
+       ORDER BY sh.date, sh.start_time`,
+      [req.user.companyId, client_id, date_from, date_to]
+    );
+
+    if (!shifts.length) return res.json({ shifts: [], lines: [] });
+
+    // Calcul durée en heures
+    function hrs(start, end) {
+      const [sh, sm] = start.split(':').map(Number);
+      const [eh, em] = end.split(':').map(Number);
+      let m = (eh * 60 + em) - (sh * 60 + sm);
+      if (m < 0) m += 1440;
+      return Math.round(m / 60 * 100) / 100;
+    }
+
+    // Grouper par site
+    const bySite = {};
+    for (const s of shifts) {
+      if (!bySite[s.site_id]) bySite[s.site_id] = { site_name: s.site_name, rate: s.hourly_rate_day || 0, hours: 0, count: 0 };
+      bySite[s.site_id].hours += hrs(s.start_time, s.end_time);
+      bySite[s.site_id].count++;
+    }
+
+    const lines = Object.values(bySite).map(b => ({
+      description: `${b.site_name} — ${b.count} vacation${b.count > 1 ? 's' : ''}`,
+      quantity:    Math.round(b.hours * 100) / 100,
+      unit_price:  Math.round(b.rate * 100) / 100,
+      total:       Math.round(b.hours * b.rate * 100) / 100,
+    }));
+
+    res.json({ shifts, lines });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── POST générer facture depuis le planning ───────────────────────────────────
+// POST /api/invoices/from-planning { client_id, date_from, date_to, tva_rate, title }
+router.post('/from-planning', requireWriter, async (req, res) => {
+  const client = await db.pool.connect();
+  try {
+    const { client_id, date_from, date_to, tva_rate = 20, title, lines } = req.body;
+    if (!client_id || !date_from || !date_to || !lines?.length) {
+      return res.status(400).json({ error: 'client_id, date_from, date_to et lines requis' });
+    }
+
+    const invoice_number = await nextInvoiceNumber(req.user.companyId);
+    const today    = new Date().toISOString().split('T')[0];
+    const dueDate  = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+    const total_ht = lines.reduce((s, l) => s + (parseFloat(l.total) || 0), 0);
+
+    await client.query('BEGIN');
+    const invRes = await client.query(
+      `INSERT INTO invoices (company_id, client_id, invoice_number, title, issue_date, due_date, tva_rate, total_ht)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+      [req.user.companyId, client_id, invoice_number, title, today, dueDate, tva_rate, Math.round(total_ht * 100) / 100]
+    );
+    const invoiceId = invRes.rows[0].id;
+
+    for (const l of lines) {
+      await client.query(
+        'INSERT INTO invoice_lines (invoice_id, description, quantity, unit_price, total) VALUES ($1,$2,$3,$4,$5)',
+        [invoiceId, l.description, l.quantity, l.unit_price, l.total]
+      );
+    }
+
+    await client.query('COMMIT');
+    client.release();
+
+    const inv = await db.get(INV_QUERY + ' WHERE i.id = ?', [invoiceId]);
+    inv.lines  = await db.all('SELECT * FROM invoice_lines WHERE invoice_id = ?', [invoiceId]);
+    res.status(201).json(inv);
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    client.release();
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── GET une facture + ses lignes ─────────────────────────────────────────────
 router.get('/:id', async (req, res) => {
   try {
