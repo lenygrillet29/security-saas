@@ -3,6 +3,7 @@ const router = express.Router();
 const { db } = require('../db/database');
 const { requireWriter } = require('../middleware/auth');
 const { calculateHours } = require('../utils/hoursCalculator');
+const { logAudit } = require('../utils/audit');
 
 const SHIFTS_QUERY = `
   SELECT sh.*,
@@ -397,6 +398,45 @@ router.get('/stats/margin', async (req, res) => {
         })),
       },
     });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/shifts/copy-day — copie tous les shifts d'un jour vers un autre
+router.post('/copy-day', requireWriter, async (req, res) => {
+  try {
+    const { from_date, to_date, copy_agents = true } = req.body;
+    if (!from_date || !to_date) return res.status(400).json({ error: 'from_date et to_date requis' });
+    if (from_date === to_date) return res.status(400).json({ error: 'Les dates source et cible doivent être différentes' });
+
+    const source = await db.all(
+      `SELECT site_id, agent_id, start_time, end_time, notes
+       FROM shifts WHERE company_id = ? AND date = ?`,
+      [req.user.companyId, from_date]
+    );
+
+    if (!source.length) return res.status(404).json({ error: 'Aucune vacation trouvée à cette date' });
+
+    let created = 0;
+    for (const s of source) {
+      const hours = calculateHours(to_date, s.start_time, s.end_time);
+      await db.insert(
+        `INSERT INTO shifts (company_id, agent_id, site_id, date, start_time, end_time,
+          hours_day, hours_night, hours_sunday, hours_sunday_night,
+          hours_holiday, hours_holiday_night, hours_holiday_sunday_day, hours_holiday_sunday_night, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [req.user.companyId,
+          copy_agents ? (s.agent_id || null) : null,
+          s.site_id, to_date, s.start_time, s.end_time,
+          hours.hours_day, hours.hours_night, hours.hours_sunday, hours.hours_sunday_night,
+          hours.hours_holiday, hours.hours_holiday_night,
+          hours.hours_holiday_sunday_day, hours.hours_holiday_sunday_night,
+          s.notes || null]
+      );
+      created++;
+    }
+
+    logAudit(req, { action: 'COPY_DAY', entityType: 'shifts', details: { from_date, to_date, count: created } });
+    res.json({ success: true, created });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

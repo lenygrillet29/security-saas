@@ -99,6 +99,7 @@ export const shiftsApi = {
     return get(`/shifts/stats/summary${q ? `?${q}` : ''}`);
   },
   replacements: (id) => get(`/shifts/${id}/replacements`),
+  copyDay: (from_date, to_date, copy_agents) => post('/shifts/copy-day', { from_date, to_date, copy_agents }),
 };
 
 // Absences

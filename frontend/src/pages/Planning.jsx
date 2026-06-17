@@ -5,7 +5,7 @@ import {
   eachDayOfInterval, isSameDay, parseISO, getDay
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Plus, Download, Mail, Trash2, Edit2, Send, Users, AlertTriangle, RefreshCw, X, ExternalLink } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Download, Mail, Trash2, Edit2, Send, Users, AlertTriangle, RefreshCw, X, ExternalLink, Copy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { shiftsApi, agentsApi, sitesApi, clientsApi, absencesApi, pdfApi, emailApi, shiftOffersApi } from '../api';
 import Modal from '../components/Modal';
@@ -894,6 +894,114 @@ function MonthlyView({ currentDate, shifts, absences, agents, onAddShift, onEdit
   );
 }
 
+// ——— Modal copie de jour ———
+function CopyDayModal({ defaultFrom, onClose, onCopied }) {
+  const toast = useToast();
+  const [fromDate, setFromDate] = useState(defaultFrom || format(new Date(), 'yyyy-MM-dd'));
+  const [toDate, setToDate]     = useState('');
+  const [copyAgents, setCopyAgents] = useState(true);
+  const [preview, setPreview]   = useState(null);
+  const [loading, setLoading]   = useState(false);
+  const [saving, setSaving]     = useState(false);
+
+  useEffect(() => {
+    if (!fromDate) { setPreview(null); return; }
+    setLoading(true);
+    shiftsApi.list({ start_date: fromDate, end_date: fromDate })
+      .then(shifts => setPreview(shifts))
+      .catch(() => setPreview([]))
+      .finally(() => setLoading(false));
+  }, [fromDate]);
+
+  async function handleCopy() {
+    if (!toDate) return toast('Sélectionnez une date cible', 'error');
+    setSaving(true);
+    try {
+      const res = await shiftsApi.copyDay(fromDate, toDate, copyAgents);
+      toast(`${res.created} vacation${res.created > 1 ? 's' : ''} copiée${res.created > 1 ? 's' : ''} ✅`);
+      onCopied();
+      onClose();
+    } catch (e) { toast(e.message, 'error'); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <Modal title="Copier le planning d'un jour" onClose={onClose} size="md">
+      <div className="space-y-5">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="label">Jour source</label>
+            <input type="date" className="input" value={fromDate} onChange={e => setFromDate(e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Jour cible</label>
+            <input type="date" className="input" value={toDate} onChange={e => setToDate(e.target.value)}
+              min={fromDate !== toDate ? undefined : undefined} />
+          </div>
+        </div>
+
+        <label className="flex items-center gap-3 cursor-pointer select-none">
+          <div
+            onClick={() => setCopyAgents(v => !v)}
+            className={`w-10 h-6 rounded-full transition-colors relative ${copyAgents ? 'bg-blue-600' : 'bg-dark-500'}`}
+          >
+            <span className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${copyAgents ? 'translate-x-5' : 'translate-x-1'}`} />
+          </div>
+          <span className="text-sm text-slate-300">Copier aussi les agents assignés</span>
+        </label>
+
+        {/* Aperçu */}
+        <div className="bg-dark-900 rounded-xl border border-dark-600 overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-dark-600 flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              Aperçu — {fromDate ? format(parseISO(fromDate), 'd MMMM yyyy', { locale: fr }) : '—'}
+            </span>
+            {loading && <RefreshCw className="w-3.5 h-3.5 text-slate-500 animate-spin" />}
+          </div>
+          {!preview || loading ? (
+            <div className="px-4 py-6 text-center text-slate-500 text-sm">Chargement…</div>
+          ) : preview.length === 0 ? (
+            <div className="px-4 py-6 text-center text-slate-500 text-sm">Aucune vacation ce jour-là</div>
+          ) : (
+            <div className="divide-y divide-dark-700">
+              {preview.map(s => (
+                <div key={s.id} className="flex items-center gap-3 px-4 py-2.5">
+                  {copyAgents && s.agent_color ? (
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: s.agent_color }} />
+                  ) : (
+                    <span className="w-2 h-2 rounded-full shrink-0 bg-slate-600" />
+                  )}
+                  <span className="text-sm text-white flex-1">
+                    {copyAgents && s.agent_first_name ? `${s.agent_first_name} ${s.agent_last_name} — ` : ''}{s.site_name}
+                  </span>
+                  <span className="text-xs text-slate-400 shrink-0">{s.start_time.slice(0,5)} – {s.end_time.slice(0,5)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {preview?.length > 0 && (
+            <div className="px-4 py-2 border-t border-dark-600 text-xs text-slate-500">
+              {preview.length} vacation{preview.length > 1 ? 's' : ''} seront copiées vers le {toDate ? format(parseISO(toDate), 'd MMMM yyyy', { locale: fr }) : '…'}
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-3">
+          <button onClick={onClose} className="btn-secondary">Annuler</button>
+          <button
+            onClick={handleCopy}
+            disabled={saving || !toDate || !preview?.length}
+            className="btn-primary disabled:opacity-50"
+          >
+            {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Copy className="w-4 h-4" />}
+            Copier {preview?.length > 0 ? `(${preview.length})` : ''}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ——— Main Planning ———
 function PlanningInner() {
   const toast = useToast();
@@ -911,6 +1019,7 @@ function PlanningInner() {
   const [offerShift, setOfferShift] = useState(null); // shift pour lequel envoyer des offres
   const [offers, setOffers] = useState([]); // toutes les offres de la période
   const [loading, setLoading] = useState(false);
+  const [copyModal, setCopyModal] = useState(null); // { fromDate }
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
@@ -990,6 +1099,9 @@ function PlanningInner() {
         <div className="flex items-center gap-2">
           <button className="btn-secondary" onClick={() => setExportModal(true)}>
             <Download className="w-4 h-4" /> Export PDF
+          </button>
+          <button className="btn-secondary" onClick={() => setCopyModal({ fromDate: format(view === 'week' ? weekStart : currentDate, 'yyyy-MM-dd') })}>
+            <Copy className="w-4 h-4" /> Copier un jour
           </button>
           <button className="btn-primary" onClick={() => setShiftModal({ shift: {} })}>
             <Plus className="w-4 h-4" /> Nouveau shift
@@ -1105,6 +1217,13 @@ function PlanningInner() {
           agents={agents}
           onClose={() => setOfferShift(null)}
           onSent={fetchData}
+        />
+      )}
+      {copyModal && (
+        <CopyDayModal
+          defaultFrom={copyModal.fromDate}
+          onClose={() => setCopyModal(null)}
+          onCopied={fetchData}
         />
       )}
     </div>
