@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Clock, Download, Sun, Moon, CalendarDays, Star, ChevronLeft, ChevronRight, Users, ChevronDown, FileSpreadsheet } from 'lucide-react';
 import { exportApi } from '../api';
+import AgentQuickView from '../components/AgentQuickView';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -42,6 +43,7 @@ export default function RecapHeures() {
   const [loading, setLoading] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const exportRef = useRef(null);
+  const [quickViewId, setQuickViewId] = useState(null);
 
   useEffect(() => {
     function handleClick(e) {
@@ -252,7 +254,11 @@ export default function RecapHeures() {
                 {data.agents.map((a, i) => (
                   <tr key={a.agent_id} className={`border-b border-dark-700/50 hover:bg-dark-700/30 transition-colors ${i % 2 === 0 ? '' : 'bg-dark-800/30'}`}>
                     <td className="py-2.5 px-3">
-                      <div className="font-medium text-white text-sm">{a.last_name} {a.first_name}</div>
+                      <div
+                        className="font-medium text-white text-sm cursor-pointer hover:text-blue-400 transition-colors select-none"
+                        onDoubleClick={() => setQuickViewId(a.agent_id)}
+                        title="Double-cliquer pour voir la fiche"
+                      >{a.last_name} {a.first_name}</div>
                       {a.employee_number && <div className="text-xs text-slate-500">{a.employee_number}</div>}
                     </td>
                     <td className="py-2.5 px-2 text-right text-slate-400 text-sm">{a.shift_count}</td>
@@ -293,5 +299,7 @@ export default function RecapHeures() {
         <p>11 jours fériés légaux français inclus (Pâques mobile, Ascension, Pentecôte…)</p>
       </div>
     </div>
+
+    {quickViewId && <AgentQuickView agentId={quickViewId} onClose={() => setQuickViewId(null)} />}
   );
 }

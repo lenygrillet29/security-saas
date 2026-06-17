@@ -8,6 +8,7 @@ import { fr } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Plus, Download, Mail, Trash2, Edit2, Send, Users, AlertTriangle, RefreshCw, X, ExternalLink, Copy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { shiftsApi, agentsApi, sitesApi, clientsApi, absencesApi, pdfApi, emailApi, shiftOffersApi } from '../api';
+import AgentQuickView from '../components/AgentQuickView';
 import Modal from '../components/Modal';
 import Confirm from '../components/Confirm';
 import { ToastProvider, useToast } from '../components/Toast';
@@ -1020,6 +1021,7 @@ function PlanningInner() {
   const [offers, setOffers] = useState([]); // toutes les offres de la période
   const [loading, setLoading] = useState(false);
   const [copyModal, setCopyModal] = useState(null); // { fromDate }
+  const [quickViewId, setQuickViewId] = useState(null);
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
@@ -1155,7 +1157,7 @@ function PlanningInner() {
             onAddShift={openAdd}
             onEditShift={openEdit}
             onDeleteShift={setDeleteId}
-            onOpenAgent={agent => navigate('/agents', { state: { openAgentId: agent.id } })}
+            onOpenAgent={agent => setQuickViewId(agent.id)}
             onReplaceShift={setReplacementShift}
             onSendOffer={setOfferShift}
             offers={offers}
@@ -1226,6 +1228,7 @@ function PlanningInner() {
           onCopied={fetchData}
         />
       )}
+      {quickViewId && <AgentQuickView agentId={quickViewId} onClose={() => setQuickViewId(null)} />}
     </div>
   );
 }
