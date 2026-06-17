@@ -233,6 +233,7 @@ export const invoicesApi = {
   previewPlanning: (params) => { const q = new URLSearchParams(params).toString(); return get(`/invoices/preview-planning?${q}`); },
   fromPlanning: (data) => post('/invoices/from-planning', data),
   remind: (id) => post(`/invoices/${id}/remind`, {}),
+  statsCA: () => get('/invoices/stats/ca'),
 };
 
 // Audit

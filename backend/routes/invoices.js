@@ -290,4 +290,57 @@ router.post('/:id/remind', requireWriter, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── GET stats CA sur 12 mois ─────────────────────────────────────────────────
+// GET /api/invoices/stats/ca
+router.get('/stats/ca', async (req, res) => {
+  try {
+    const months = [];
+    const now = new Date();
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    }
+
+    // CA facturé par mois (toutes factures non-draft)
+    const invoiced = await db.all(`
+      SELECT TO_CHAR(issue_date::date, 'YYYY-MM') AS month,
+             SUM(total_ht) AS total
+      FROM invoices
+      WHERE company_id = ? AND status != 'draft'
+        AND issue_date >= ?
+      GROUP BY 1
+    `, [req.user.companyId, months[0] + '-01']);
+
+    // CA encaissé par mois (factures payées)
+    const paid = await db.all(`
+      SELECT TO_CHAR(payment_date::date, 'YYYY-MM') AS month,
+             SUM(total_ht) AS total
+      FROM invoices
+      WHERE company_id = ? AND status = 'paid' AND payment_date IS NOT NULL
+        AND payment_date >= ?
+      GROUP BY 1
+    `, [req.user.companyId, months[0] + '-01']);
+
+    const invoicedMap = Object.fromEntries(invoiced.map(r => [r.month, parseFloat(r.total) || 0]));
+    const paidMap     = Object.fromEntries(paid.map(r => [r.month, parseFloat(r.total) || 0]));
+
+    const data = months.map(m => ({
+      month:    m,
+      invoiced: invoicedMap[m] || 0,
+      paid:     paidMap[m]     || 0,
+    }));
+
+    // Totaux globaux
+    const totals = await db.get(`
+      SELECT
+        COALESCE(SUM(CASE WHEN status != 'draft' THEN total_ht END), 0) AS total_invoiced,
+        COALESCE(SUM(CASE WHEN status = 'paid'   THEN total_ht END), 0) AS total_paid,
+        COALESCE(SUM(CASE WHEN status IN ('sent','overdue') THEN total_ht END), 0) AS total_pending
+      FROM invoices WHERE company_id = ?
+    `, [req.user.companyId]);
+
+    res.json({ months: data, totals });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

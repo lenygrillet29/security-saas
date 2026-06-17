@@ -6,6 +6,8 @@ import {
   Bell, FileText, ChevronRight, Loader2, Shield,
 } from 'lucide-react';
 import { agentsApi, clientsApi, sitesApi, shiftsApi, invoicesApi, shiftOffersApi } from '../api';
+
+const fmt = n => n >= 1000 ? `${(n/1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(Math.round(n));
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
@@ -92,29 +94,43 @@ function TodayShiftRow({ shift }) {
   );
 }
 
-// ── Graphique CA ──────────────────────────────────────────────────────────────
-function RevenueBar({ months }) {
-  if (!months.length) return <p className="text-slate-500 text-sm py-8 text-center">Aucune donnée</p>;
-  const max = Math.max(...months.map(m => parseFloat(m.revenue) || 0), 1);
+// ── Graphique CA facturé vs encaissé ─────────────────────────────────────────
+function CAChart({ months }) {
+  if (!months || !months.length) return <p className="text-slate-500 text-sm py-8 text-center">Aucune facture émise</p>;
+  const max = Math.max(...months.flatMap(m => [m.invoiced, m.paid]), 1);
   return (
-    <div className="flex items-end gap-2 h-32">
-      {months.map(m => {
-        const h = Math.max(((parseFloat(m.revenue) || 0) / max) * 100, 4);
-        const label = m.month ? m.month.slice(5) + '/' + m.month.slice(2, 4) : '';
-        return (
-          <div key={m.month} className="flex-1 flex flex-col items-center gap-1">
-            <div className="text-xs text-slate-500 font-medium">
-              {m.revenue > 0 ? `${(parseFloat(m.revenue)/1000).toFixed(1)}k` : ''}
+    <div>
+      <div className="flex gap-4 mb-3 text-xs text-slate-400">
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-blue-500 inline-block" />Facturé</span>
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-emerald-500 inline-block" />Encaissé</span>
+      </div>
+      <div className="flex items-end gap-1.5 h-28">
+        {months.map(m => {
+          const hi = Math.max((m.invoiced / max) * 100, m.invoiced > 0 ? 4 : 0);
+          const hp = Math.max((m.paid     / max) * 100, m.paid > 0     ? 4 : 0);
+          const label = m.month ? m.month.slice(5) + '/' + m.month.slice(2, 4) : '';
+          return (
+            <div key={m.month} className="flex-1 flex flex-col items-center gap-0.5">
+              <div className="text-[10px] text-slate-500 h-4 leading-4">
+                {m.invoiced > 0 ? fmt(m.invoiced) : ''}
+              </div>
+              <div className="w-full flex gap-0.5 items-end" style={{ height: '80px' }}>
+                <div
+                  className="flex-1 rounded-t bg-blue-500/70 hover:bg-blue-500 transition-colors"
+                  style={{ height: `${hi}%` }}
+                  title={`Facturé : ${m.invoiced.toLocaleString('fr-FR')} €`}
+                />
+                <div
+                  className="flex-1 rounded-t bg-emerald-500/70 hover:bg-emerald-500 transition-colors"
+                  style={{ height: `${hp}%` }}
+                  title={`Encaissé : ${m.paid.toLocaleString('fr-FR')} €`}
+                />
+              </div>
+              <div className="text-[10px] text-slate-500 mt-0.5">{label}</div>
             </div>
-            <div
-              className="w-full rounded-t-md bg-blue-500/70 hover:bg-blue-500 transition-colors cursor-default"
-              style={{ height: `${h}%` }}
-              title={`${m.revenue} € — ${m.hours}h`}
-            />
-            <div className="text-xs text-slate-500">{label}</div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -147,6 +163,7 @@ export default function Dashboard() {
   const [monthStats, setMonthStats] = useState([]);
   const [revenue, setRevenue]       = useState([]);
   const [topClients, setTopClients] = useState([]);
+  const [caStats, setCaStats]       = useState(null);
   const [todayShifts, setTodayShifts]     = useState([]);
   const [weekShifts, setWeekShifts]       = useState([]);
   const [pendingOffers, setPendingOffers] = useState([]);
@@ -177,7 +194,8 @@ export default function Dashboard() {
       shiftOffersApi.list(),
       invoicesApi.list(),
       agentsApi.carteProAlerts(),
-    ]).then(([a, c, s, ws, ms, rev, tc, ts, wsh, offers, invoices, cpa]) => {
+      invoicesApi.statsCA().catch(() => null),
+    ]).then(([a, c, s, ws, ms, rev, tc, ts, wsh, offers, invoices, cpa, ca]) => {
       setAgents(a); setClients(c); setSites(s);
       setWeekStats(ws); setMonthStats(ms);
       setRevenue(Array.isArray(rev) ? rev : []);
@@ -191,6 +209,7 @@ export default function Dashboard() {
         : []
       );
       setCarteProAlerts(Array.isArray(cpa) ? cpa : []);
+      if (ca) setCaStats(ca);
     }).finally(() => setLoading(false));
   }, []);
 
@@ -323,16 +342,37 @@ export default function Dashboard() {
         )}
       </section>
 
+      {/* ── CA factures ── */}
+      {caStats && (
+        <section className="grid grid-cols-3 gap-3">
+          <div className="card p-4">
+            <div className="text-xs text-slate-500 mb-1">Total facturé</div>
+            <div className="text-xl font-bold text-blue-400">{Number(caStats.totals.total_invoiced).toLocaleString('fr-FR', { minimumFractionDigits: 0 })} €</div>
+            <div className="text-xs text-slate-500 mt-0.5">HT · toutes périodes</div>
+          </div>
+          <div className="card p-4">
+            <div className="text-xs text-slate-500 mb-1">Total encaissé</div>
+            <div className="text-xl font-bold text-emerald-400">{Number(caStats.totals.total_paid).toLocaleString('fr-FR', { minimumFractionDigits: 0 })} €</div>
+            <div className="text-xs text-slate-500 mt-0.5">HT · factures payées</div>
+          </div>
+          <div className="card p-4">
+            <div className="text-xs text-slate-500 mb-1">En attente</div>
+            <div className="text-xl font-bold text-amber-400">{Number(caStats.totals.total_pending).toLocaleString('fr-FR', { minimumFractionDigits: 0 })} €</div>
+            <div className="text-xs text-slate-500 mt-0.5">HT · envoyées non payées</div>
+          </div>
+        </section>
+      )}
+
       {/* ── Graphiques ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-white flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-blue-400" /> CA mensuel (6 mois)
+              <BarChart3 className="w-4 h-4 text-blue-400" /> CA sur 12 mois
             </h2>
-            <span className="text-xs text-slate-500">Estimé · taux horaires sites</span>
+            <span className="text-xs text-slate-500">Facturé vs encaissé</span>
           </div>
-          <RevenueBar months={revenue} />
+          <CAChart months={caStats?.months} />
         </div>
 
         <div className="card p-5">
