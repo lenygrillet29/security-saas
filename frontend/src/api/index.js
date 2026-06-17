@@ -263,6 +263,18 @@ export const expensesApi = {
   reject:  (id, reason) => post(`/expenses/${id}/reject`, { reason }),
 };
 
+// Incidents
+export const incidentsApi = {
+  list:   (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/incidents${q ? `?${q}` : ''}`); },
+  stats:  () => get('/incidents/stats'),
+  get:    (id) => get(`/incidents/${id}`),
+  create: (data) => post('/incidents', data),
+  update: (id, data) => put(`/incidents/${id}`, data),
+  close:  (id) => post(`/incidents/${id}/close`, {}),
+  reopen: (id) => post(`/incidents/${id}/reopen`, {}),
+  delete: (id) => del(`/incidents/${id}`),
+};
+
 // Formations & habilitations
 export const trainingsApi = {
   list:   (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/trainings${q ? `?${q}` : ''}`); },

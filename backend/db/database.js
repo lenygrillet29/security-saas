@@ -443,6 +443,29 @@ async function init() {
     );
   `);
 
+  // ── Incidents sur sites ────────────────────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS incidents (
+      id           SERIAL PRIMARY KEY,
+      company_id   INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      site_id      INTEGER REFERENCES sites(id) ON DELETE SET NULL,
+      agent_id     INTEGER REFERENCES agents(id) ON DELETE SET NULL,
+      shift_id     INTEGER REFERENCES shifts(id) ON DELETE SET NULL,
+      date         TEXT NOT NULL,
+      time         TEXT,
+      type         TEXT NOT NULL DEFAULT 'autre',
+      severity     TEXT NOT NULL DEFAULT 'mineur',
+      title        TEXT NOT NULL,
+      description  TEXT,
+      actions_taken TEXT,
+      status       TEXT NOT NULL DEFAULT 'ouvert',
+      closed_at    TIMESTAMP,
+      closed_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      notes        TEXT,
+      created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   // ── Formations et habilitations agents ────────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS agent_trainings (
