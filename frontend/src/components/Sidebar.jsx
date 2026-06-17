@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Calendar, Users, Building2,
   MapPin, FileText, Settings, Shield, ClipboardList,
-  LogOut, ChevronDown, CreditCard, ScrollText, Receipt, Activity, TrendingUp, Calculator, X, Download, Clock,
+  LogOut, ChevronDown, CreditCard, ScrollText, Receipt, Activity, TrendingUp, Calculator, X, Download, Clock, Wallet,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
@@ -18,6 +18,7 @@ const NAV = [
   { to: '/quotes',    icon: FileText,      label: 'Devis' },
   { to: '/contracts', icon: ScrollText, label: 'Contrats' },
   { to: '/invoices',  icon: Receipt,   label: 'Factures' },
+  { to: '/expenses',  icon: Wallet,    label: 'Notes de frais' },
   { to: '/audit',      icon: Activity,    label: 'Journal d\'audit' },
   { to: '/simulation', icon: TrendingUp,  label: 'Simulation marge' },
   { to: '/chiffrage',  icon: Calculator,  label: 'Chiffrage', badge: 'Pro' },

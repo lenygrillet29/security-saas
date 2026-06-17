@@ -395,6 +395,24 @@ async function init() {
     );
   `);
 
+  // ── Notes de frais agents ────────────────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS expense_reports (
+      id          SERIAL PRIMARY KEY,
+      company_id  INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      agent_id    INTEGER NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+      shift_id    INTEGER REFERENCES shifts(id) ON DELETE SET NULL,
+      date        TEXT NOT NULL,
+      type        TEXT NOT NULL DEFAULT 'autre',
+      description TEXT,
+      amount      REAL NOT NULL DEFAULT 0,
+      status      TEXT NOT NULL DEFAULT 'pending',
+      reject_reason TEXT,
+      notes       TEXT,
+      created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   // ── Offres de vacation (demandes envoyées aux agents) ────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS shift_offers (

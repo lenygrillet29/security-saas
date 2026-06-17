@@ -238,6 +238,17 @@ export const invoicesApi = {
   statsCA: () => get('/invoices/stats/ca'),
 };
 
+// Notes de frais
+export const expensesApi = {
+  list:    (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/expenses${q ? `?${q}` : ''}`); },
+  stats:   () => get('/expenses/stats'),
+  create:  (data) => post('/expenses', data),
+  update:  (id, data) => put(`/expenses/${id}`, data),
+  delete:  (id) => del(`/expenses/${id}`),
+  approve: (id) => post(`/expenses/${id}/approve`, {}),
+  reject:  (id, reason) => post(`/expenses/${id}/reject`, { reason }),
+};
+
 // Audit
 export const auditApi = {
   list: (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/audit${q ? `?${q}` : ''}`); },
