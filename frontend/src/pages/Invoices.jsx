@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, FileText, CheckCircle, Clock, AlertCircle, XCircle, Trash2, Edit2, ArrowRight, Download, Calendar, Loader2 } from 'lucide-react';
+import { Plus, FileText, CheckCircle, Clock, AlertCircle, XCircle, Trash2, Edit2, ArrowRight, Download, Calendar, Loader2, Send } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 import { invoicesApi, clientsApi, quotesApi } from '../api';
@@ -356,6 +356,14 @@ function InvoicesInner() {
     } catch (e) { toast(e.message, 'error'); }
   }
 
+  async function handleRemind(inv) {
+    try {
+      await invoicesApi.remind(inv.id);
+      toast(`Relance envoyée à ${inv.client_name} ✅`);
+      await load();
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
   async function handleFromQuote(quoteId) {
     setConverting(quoteId);
     try {
@@ -484,10 +492,17 @@ function InvoicesInner() {
                       Envoyer
                     </button>
                   )}
-                  {(inv.status === 'sent' || isOverdue) && (
+                  {(inv.status === 'sent' || isOverdue || inv.status === 'overdue') && (
                     <button onClick={() => handleStatusChange(inv, 'paid')}
                       className="px-2 py-1 text-xs bg-emerald-600/20 text-emerald-400 rounded hover:bg-emerald-600/40 transition-colors">
                       Payée ✓
+                    </button>
+                  )}
+                  {(isOverdue || inv.status === 'overdue') && (
+                    <button onClick={() => handleRemind(inv)}
+                      className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-amber-400/10 rounded-lg transition-colors"
+                      title="Envoyer une relance par email">
+                      <Send className="w-3.5 h-3.5" />
                     </button>
                   )}
                   {inv.status !== 'paid' && inv.status !== 'cancelled' && (

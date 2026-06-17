@@ -209,6 +209,7 @@ export const invoicesApi = {
   fromQuote: (quoteId) => post(`/invoices/from-quote/${quoteId}`, {}),
   previewPlanning: (params) => { const q = new URLSearchParams(params).toString(); return get(`/invoices/preview-planning?${q}`); },
   fromPlanning: (data) => post('/invoices/from-planning', data),
+  remind: (id) => post(`/invoices/${id}/remind`, {}),
 };
 
 // Audit
@@ -216,15 +217,15 @@ export const auditApi = {
   list: (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/audit${q ? `?${q}` : ''}`); },
 };
 
-// Export CSV (window.open car c'est un téléchargement)
+// Export CSV / Excel (window.open car c'est un téléchargement)
 export const exportApi = {
-  shifts: (start_date, end_date) => {
+  shifts: (start_date, end_date, format = 'csv') => {
     const token = localStorage.getItem('auth_token');
-    window.open(`${BASE}/export/shifts?start_date=${start_date}&end_date=${end_date}&token=${token}`, '_blank');
+    window.open(`${BASE}/export/shifts?start_date=${start_date}&end_date=${end_date}&format=${format}&token=${token}`, '_blank');
   },
-  invoices: (start_date, end_date) => {
+  invoices: (start_date, end_date, format = 'csv') => {
     const token = localStorage.getItem('auth_token');
-    window.open(`${BASE}/export/invoices?start_date=${start_date}&end_date=${end_date}&token=${token}`, '_blank');
+    window.open(`${BASE}/export/invoices?start_date=${start_date}&end_date=${end_date}&format=${format}&token=${token}`, '_blank');
   },
 };
 

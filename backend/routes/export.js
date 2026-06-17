@@ -1,13 +1,15 @@
 /**
- * Export CSV pour la comptabilité et la paie.
- * GET /api/export/shifts?start_date=&end_date=
- * GET /api/export/invoices?start_date=&end_date=
+ * Export CSV / Excel pour la comptabilité et la paie.
+ * GET /api/export/shifts?start_date=&end_date=&format=csv|xlsx
+ * GET /api/export/invoices?start_date=&end_date=&format=csv|xlsx
  */
-const express = require('express');
-const router  = express.Router();
-const { db }  = require('../db/database');
+const express  = require('express');
+const router   = express.Router();
+const { db }   = require('../db/database');
 const { logAudit } = require('../utils/audit');
+const ExcelJS  = require('exceljs');
 
+// ── CSV ──────────────────────────────────────────────────────────────────────
 function toCSV(rows, columns) {
   const header = columns.map(c => c.label).join(';');
   const lines  = rows.map(row =>
@@ -20,10 +22,56 @@ function toCSV(rows, columns) {
   return '﻿' + [header, ...lines].join('\n'); // BOM UTF-8 pour Excel
 }
 
-// ─── Export shifts (prestations) ──────────────────────────────────────────────
+// ── Excel ────────────────────────────────────────────────────────────────────
+async function toXLSX(res, rows, columns, sheetName, filename) {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'SecuroPlan';
+  const ws = wb.addWorksheet(sheetName);
+
+  ws.columns = columns.map(c => ({
+    header: c.label,
+    key:    c.key,
+    width:  Math.max(c.label.length + 4, 14),
+  }));
+
+  // En-tête en gras avec fond bleu foncé
+  ws.getRow(1).eachCell(cell => {
+    cell.font      = { bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
+    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+  });
+  ws.getRow(1).height = 20;
+
+  // Données
+  rows.forEach((row, i) => {
+    const r = ws.addRow(columns.map(c => row[c.key] ?? ''));
+    if (i % 2 === 1) {
+      r.eachCell(cell => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+      });
+    }
+  });
+
+  // Bordure légère sur toutes les cellules
+  ws.eachRow(r => r.eachCell(cell => {
+    cell.border = {
+      top:    { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      left:   { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      right:  { style: 'thin', color: { argb: 'FFE2E8F0' } },
+    };
+  }));
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  await wb.xlsx.write(res);
+  res.end();
+}
+
+// ── Export shifts (prestations) ───────────────────────────────────────────────
 router.get('/shifts', async (req, res) => {
   try {
-    const { start_date, end_date } = req.query;
+    const { start_date, end_date, format = 'csv' } = req.query;
     const rows = await db.all(`
       SELECT
         sh.date,
@@ -49,33 +97,37 @@ router.get('/shifts', async (req, res) => {
       ORDER BY sh.date, a.last_name
     `, [req.user.companyId, start_date || '2000-01-01', end_date || '2099-12-31']);
 
-    const csv = toCSV(rows, [
-      { key: 'date',           label: 'Date' },
-      { key: 'agent',          label: 'Agent' },
-      { key: 'employee_number',label: 'N° matricule' },
-      { key: 'client',         label: 'Client' },
-      { key: 'site',           label: 'Site' },
-      { key: 'start_time',     label: 'Début' },
-      { key: 'end_time',       label: 'Fin' },
-      { key: 'hours_day',      label: 'H. jour' },
-      { key: 'hours_night',    label: 'H. nuit' },
-      { key: 'hours_sunday',   label: 'H. dimanche' },
-      { key: 'total_hours',    label: 'Total heures' },
-      { key: 'montant_ht',     label: 'Montant HT (€)' },
-      { key: 'notes',          label: 'Notes' },
-    ]);
+    const columns = [
+      { key: 'date',            label: 'Date' },
+      { key: 'agent',           label: 'Agent' },
+      { key: 'employee_number', label: 'N° matricule' },
+      { key: 'client',          label: 'Client' },
+      { key: 'site',            label: 'Site' },
+      { key: 'start_time',      label: 'Début' },
+      { key: 'end_time',        label: 'Fin' },
+      { key: 'hours_day',       label: 'H. jour' },
+      { key: 'hours_night',     label: 'H. nuit' },
+      { key: 'hours_sunday',    label: 'H. dimanche' },
+      { key: 'total_hours',     label: 'Total heures' },
+      { key: 'montant_ht',      label: 'Montant HT (€)' },
+      { key: 'notes',           label: 'Notes' },
+    ];
 
-    logAudit(req, { action: 'EXPORT', entityType: 'shifts', details: { start_date, end_date, count: rows.length } });
+    logAudit(req, { action: 'EXPORT', entityType: 'shifts', details: { start_date, end_date, format, count: rows.length } });
+
+    if (format === 'xlsx') {
+      return toXLSX(res, rows, columns, 'Prestations', `prestations_${start_date}_${end_date}.xlsx`);
+    }
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="prestations_${start_date}_${end_date}.csv"`);
-    res.send(csv);
+    res.send(toCSV(rows, columns));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Export factures ──────────────────────────────────────────────────────────
+// ── Export factures ───────────────────────────────────────────────────────────
 router.get('/invoices', async (req, res) => {
   try {
-    const { start_date, end_date } = req.query;
+    const { start_date, end_date, format = 'csv' } = req.query;
     const rows = await db.all(`
       SELECT
         i.invoice_number,
@@ -99,7 +151,7 @@ router.get('/invoices', async (req, res) => {
     const STATUS_FR = { draft: 'Brouillon', sent: 'Envoyée', paid: 'Payée', overdue: 'En retard', cancelled: 'Annulée' };
     const mapped = rows.map(r => ({ ...r, status: STATUS_FR[r.status] || r.status }));
 
-    const csv = toCSV(mapped, [
+    const columns = [
       { key: 'invoice_number', label: 'N° facture' },
       { key: 'issue_date',     label: "Date d'émission" },
       { key: 'due_date',       label: "Date d'échéance" },
@@ -111,12 +163,16 @@ router.get('/invoices', async (req, res) => {
       { key: 'status',         label: 'Statut' },
       { key: 'payment_date',   label: 'Date paiement' },
       { key: 'notes',          label: 'Notes' },
-    ]);
+    ];
 
-    logAudit(req, { action: 'EXPORT', entityType: 'invoices', details: { start_date, end_date, count: rows.length } });
+    logAudit(req, { action: 'EXPORT', entityType: 'invoices', details: { start_date, end_date, format, count: rows.length } });
+
+    if (format === 'xlsx') {
+      return toXLSX(res, mapped, columns, 'Factures', `factures_${start_date}_${end_date}.xlsx`);
+    }
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="factures_${start_date}_${end_date}.csv"`);
-    res.send(csv);
+    res.send(toCSV(mapped, columns));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

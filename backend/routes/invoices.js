@@ -2,6 +2,8 @@ const express = require('express');
 const router  = express.Router();
 const { db }  = require('../db/database');
 const { requireWriter } = require('../middleware/auth');
+const { sendSystemEmail } = require('../utils/systemEmail');
+const templates = require('../utils/emailTemplates');
 
 async function nextInvoiceNumber(companyId) {
   const row = await db.get(
@@ -240,6 +242,50 @@ router.delete('/:id', requireWriter, async (req, res) => {
   try {
     const { changes } = await db.run('DELETE FROM invoices WHERE id = ? AND company_id = ?', [req.params.id, req.user.companyId]);
     if (!changes) return res.status(404).json({ error: 'Facture non trouvée' });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/invoices/:id/remind — relance manuelle
+router.post('/:id/remind', requireWriter, async (req, res) => {
+  try {
+    const inv = await db.get(`
+      SELECT i.*, cl.name AS client_name, cl.email AS client_email,
+             co.name AS company_name
+      FROM invoices i
+      JOIN clients cl  ON cl.id = i.client_id
+      JOIN companies co ON co.id = i.company_id
+      WHERE i.id = ? AND i.company_id = ?
+    `, [req.params.id, req.user.companyId]);
+
+    if (!inv) return res.status(404).json({ error: 'Facture non trouvée' });
+    if (!inv.client_email) return res.status(400).json({ error: 'Le client n\'a pas d\'adresse email' });
+
+    const today = new Date().toISOString().slice(0, 10);
+    const daysLate = inv.due_date
+      ? Math.max(0, Math.floor((new Date(today) - new Date(inv.due_date)) / 86400000))
+      : 0;
+    const totalTtc = ((inv.total_ht || 0) * (1 + (inv.tva_rate || 20) / 100)).toFixed(2);
+    const frDate = (d) => new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+
+    await sendSystemEmail({
+      to: inv.client_email,
+      subject: `Rappel facture ${inv.invoice_number} — ${inv.company_name}`,
+      html: templates.invoiceOverdue({
+        clientName:    inv.client_name,
+        companyName:   inv.company_name,
+        invoiceNumber: inv.invoice_number,
+        totalTtc,
+        dueDate: inv.due_date ? frDate(inv.due_date) : '—',
+        daysLate,
+        appUrl: null,
+      }),
+    });
+
+    if (inv.status === 'sent' && daysLate > 0) {
+      await db.run("UPDATE invoices SET status = 'overdue' WHERE id = ?", [inv.id]);
+    }
+
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

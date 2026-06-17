@@ -3,6 +3,7 @@ const { db } = require('../db/database');
 const { sendSystemEmail } = require('../utils/systemEmail');
 const { sendSMS } = require('../utils/smsService');
 const templates = require('../utils/emailTemplates');
+const { sendInvoiceReminders } = require('./invoiceReminders');
 
 function frDate(d) {
   return new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -93,7 +94,10 @@ function startScheduler() {
   // SMS rappels shifts — tous les jours à 18h00 (Paris)
   cron.schedule('0 18 * * *', sendShiftSMSReminders, { timezone: 'Europe/Paris' });
 
-  console.log('[Scheduler] Démarré — rappels essai (9h00) · SMS shifts (18h00)');
+  // Relances factures impayées — tous les jours à 9h30 (Paris)
+  cron.schedule('30 9 * * *', sendInvoiceReminders, { timezone: 'Europe/Paris' });
+
+  console.log('[Scheduler] Démarré — rappels essai (9h00) · SMS shifts (18h00) · relances factures (9h30)');
 }
 
 module.exports = { startScheduler, sendTrialReminders, sendShiftSMSReminders };

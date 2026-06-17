@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
-import { Clock, Download, Sun, Moon, CalendarDays, Star, ChevronLeft, ChevronRight, Users } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Clock, Download, Sun, Moon, CalendarDays, Star, ChevronLeft, ChevronRight, Users, ChevronDown, FileSpreadsheet } from 'lucide-react';
+import { exportApi } from '../api';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -39,6 +40,16 @@ export default function RecapHeures() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [data, setData]   = useState(null);
   const [loading, setLoading] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportRef = useRef(null);
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (exportRef.current && !exportRef.current.contains(e.target)) setExportOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   function startOfMonth(y, m) { return `${y}-${String(m).padStart(2,'0')}-01`; }
   function endOfMonth(y, m) {
@@ -70,39 +81,11 @@ export default function RecapHeures() {
     else setMonth(m => m + 1);
   }
 
-  // Export CSV
-  function exportCSV() {
-    if (!data?.agents?.length) return;
-    const header = ['Agent', 'N° Employé', 'Vacations',
-      'H. Jour', 'H. Nuit',
-      'Dim. Jour', 'Dim. Nuit',
-      'Fér. Jour', 'Fér. Nuit',
-      'Fér. Dim. Jour', 'Fér. Dim. Nuit',
-      'Total'].join(';');
-    const rows = data.agents.map(a =>
-      [
-        `${a.last_name} ${a.first_name}`,
-        a.employee_number || '',
-        a.shift_count,
-        fmtHStr(a.total_day),
-        fmtHStr(a.total_night),
-        fmtHStr(a.total_sunday),
-        fmtHStr(a.total_sunday_night),
-        fmtHStr(a.total_holiday),
-        fmtHStr(a.total_holiday_night),
-        fmtHStr(a.total_holiday_sunday_day),
-        fmtHStr(a.total_holiday_sunday_night),
-        fmtHStr(a.total_hours),
-      ].join(';')
-    );
-    const csv = [header, ...rows].join('\n');
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = `recap_heures_${year}-${String(month).padStart(2,'0')}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  function doExport(format) {
+    const start = startOfMonth(year, month);
+    const end   = endOfMonth(year, month);
+    exportApi.shifts(start, end, format);
+    setExportOpen(false);
   }
 
   // Totaux globaux
@@ -135,9 +118,44 @@ export default function RecapHeures() {
             Heures jour · nuit · dimanche · fériées par agent
           </p>
         </div>
-        <button onClick={exportCSV} className="btn-secondary flex items-center gap-2">
-          <Download className="w-4 h-4" /> Export CSV
-        </button>
+        {/* Bouton export split CSV / Excel */}
+        <div className="relative" ref={exportRef}>
+          <div className="flex">
+            <button
+              onClick={() => doExport('csv')}
+              disabled={!data?.agents?.length}
+              className="btn-secondary flex items-center gap-2 rounded-r-none border-r-0 disabled:opacity-40"
+            >
+              <Download className="w-4 h-4" /> Export CSV
+            </button>
+            <button
+              onClick={() => setExportOpen(o => !o)}
+              disabled={!data?.agents?.length}
+              className="btn-secondary px-2 rounded-l-none disabled:opacity-40"
+              title="Choisir le format"
+            >
+              <ChevronDown className="w-4 h-4" />
+            </button>
+          </div>
+          {exportOpen && (
+            <div className="absolute right-0 top-full mt-1 w-44 bg-dark-700 border border-dark-500 rounded-xl shadow-xl z-20 overflow-hidden">
+              <button
+                onClick={() => doExport('csv')}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-200 hover:bg-dark-600 transition-colors"
+              >
+                <Download className="w-4 h-4 text-slate-400" />
+                CSV (.csv)
+              </button>
+              <button
+                onClick={() => doExport('xlsx')}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-200 hover:bg-dark-600 transition-colors"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                Excel (.xlsx)
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Sélecteur de mois */}

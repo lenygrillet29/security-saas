@@ -331,4 +331,35 @@ function shiftOffer({ agentFirstName, companyName, date, startTime, endTime, sit
   `);
 }
 
-module.exports = { welcome, trialEnding, paymentSucceeded, paymentFailed, cancellationConfirmed, newFeature, contractSignRequest, clientPortalLink, agentPortalLink, passwordReset, shiftOffer };
+function invoiceOverdue({ clientName, companyName, invoiceNumber, totalTtc, dueDate, daysLate, appUrl }) {
+  const urgency = daysLate >= 30 ? '🔴 URGENT — ' : daysLate >= 7 ? '⚠️ ' : '';
+  return base(`${urgency}Facture impayée — ${invoiceNumber}`, `
+    <h1 style="color:white;font-size:22px;margin:0 0 12px;">Rappel de paiement 📄</h1>
+    <p style="color:#94a3b8;font-size:14px;margin:0 0 24px;line-height:1.6;">
+      Bonjour,<br><br>
+      Sauf erreur de votre part, la facture ci-dessous n'a pas encore été réglée.
+      Nous vous remercions de bien vouloir procéder au paiement dans les meilleurs délais.
+    </p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;border-radius:12px;margin-bottom:28px;">
+      <tr><td style="padding:20px 24px;">
+        <p style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:.08em;margin:0 0 14px;font-weight:600;">Détail de la facture</p>
+        <table width="100%" cellpadding="0" cellspacing="0">
+          ${row('N° facture', invoiceNumber)}
+          ${row('Montant TTC', `<strong style="color:#f59e0b;">${totalTtc} €</strong>`)}
+          ${row('Échéance', dueDate, '#f87171')}
+          ${row('Retard', `${daysLate} jour${daysLate > 1 ? 's' : ''}`, '#f87171')}
+        </table>
+      </td></tr>
+    </table>
+
+    ${appUrl ? btn('Voir la facture →', appUrl, '#2563eb') : ''}
+
+    <p style="color:#475569;font-size:12px;margin:16px 0 0;text-align:center;line-height:1.8;">
+      Si vous avez déjà effectué le paiement, veuillez ignorer ce message.<br>
+      Pour toute question, contactez <strong style="color:#94a3b8;">${companyName}</strong>.
+    </p>
+  `);
+}
+
+module.exports = { welcome, trialEnding, paymentSucceeded, paymentFailed, cancellationConfirmed, newFeature, contractSignRequest, clientPortalLink, agentPortalLink, passwordReset, shiftOffer, invoiceOverdue };
