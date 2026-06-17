@@ -278,6 +278,10 @@ export const exportApi = {
     const token = localStorage.getItem('auth_token');
     window.open(`${BASE}/export/invoices?start_date=${start_date}&end_date=${end_date}&format=${format}&token=${token}`, '_blank');
   },
+  paie: (month, format = 'xlsx') => {
+    const token = localStorage.getItem('auth_token');
+    window.open(`${BASE}/export/paie?month=${month}&format=${format}&token=${token}`, '_blank');
+  },
 };
 
 // Rapport mensuel PDF

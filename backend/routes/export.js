@@ -179,4 +179,116 @@ router.get('/invoices', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Export paie consolidé (heures + frais + CP) ───────────────────────────────
+// GET /api/export/paie?month=YYYY-MM&format=csv|xlsx
+router.get('/paie', async (req, res) => {
+  try {
+    const { format = 'xlsx' } = req.query;
+    const month = req.query.month || new Date().toISOString().slice(0, 7);
+    const [year, mon] = month.split('-');
+    const startDate = `${month}-01`;
+    const endDate   = new Date(parseInt(year), parseInt(mon), 0).toISOString().slice(0, 10);
+
+    const agents = await db.all(
+      `SELECT id, first_name, last_name, employee_number, contract_type, hourly_rate
+       FROM agents WHERE company_id = ? AND active = 1
+       ORDER BY last_name, first_name`,
+      [req.user.companyId]
+    );
+
+    const rows = await Promise.all(agents.map(async (a) => {
+      const h = await db.get(`
+        SELECT
+          COALESCE(SUM(hours_day),0)                  AS h_jour,
+          COALESCE(SUM(hours_night),0)                AS h_nuit,
+          COALESCE(SUM(hours_sunday),0)               AS h_dim,
+          COALESCE(SUM(hours_sunday_night),0)         AS h_dim_nuit,
+          COALESCE(SUM(hours_holiday),0)              AS h_ferie,
+          COALESCE(SUM(hours_holiday_night),0)        AS h_ferie_nuit,
+          COALESCE(SUM(hours_holiday_sunday_day),0)   AS h_ferie_dim,
+          COALESCE(SUM(hours_holiday_sunday_night),0) AS h_ferie_dim_nuit,
+          COUNT(*)                                     AS nb_vacations
+        FROM shifts
+        WHERE agent_id = ? AND company_id = ? AND date >= ? AND date <= ?
+      `, [a.id, req.user.companyId, startDate, endDate]);
+
+      const totalH = ['h_jour','h_nuit','h_dim','h_dim_nuit',
+        'h_ferie','h_ferie_nuit','h_ferie_dim','h_ferie_dim_nuit']
+        .reduce((s, k) => s + (parseFloat(h[k]) || 0), 0);
+
+      const frais = await db.get(`
+        SELECT COALESCE(SUM(amount), 0) AS total, COUNT(*) AS nb
+        FROM expense_reports
+        WHERE agent_id = ? AND company_id = ? AND date >= ? AND date <= ? AND status = 'approved'
+      `, [a.id, req.user.companyId, startDate, endDate]);
+
+      const cp = await db.get(
+        `SELECT COALESCE(SUM(days), 0) AS balance FROM cp_transactions
+         WHERE agent_id = ? AND company_id = ?`,
+        [a.id, req.user.companyId]
+      );
+
+      const absences = await db.all(`
+        SELECT type, start_date, end_date FROM absences
+        WHERE agent_id = ? AND company_id = ? AND status = 'approved'
+          AND start_date <= ? AND end_date >= ?
+      `, [a.id, req.user.companyId, endDate, startDate]);
+
+      const absJours = absences.reduce((s, ab) => {
+        const s1 = new Date(Math.max(new Date(ab.start_date), new Date(startDate)));
+        const e1 = new Date(Math.min(new Date(ab.end_date), new Date(endDate)));
+        return s + Math.max(0, Math.round((e1 - s1) / 86400000) + 1);
+      }, 0);
+
+      const brutEstime = totalH * (a.hourly_rate || 0);
+
+      return {
+        matricule:    a.employee_number || '',
+        nom:          a.last_name,
+        prenom:       a.first_name,
+        contrat:      a.contract_type || '',
+        nb_vacations: parseInt(h.nb_vacations) || 0,
+        h_jour:       Math.round((parseFloat(h.h_jour) || 0) * 100) / 100,
+        h_nuit:       Math.round((parseFloat(h.h_nuit) || 0) * 100) / 100,
+        h_dim:        Math.round(((parseFloat(h.h_dim) || 0) + (parseFloat(h.h_dim_nuit) || 0)) * 100) / 100,
+        h_ferie:      Math.round(((parseFloat(h.h_ferie) || 0) + (parseFloat(h.h_ferie_nuit) || 0) + (parseFloat(h.h_ferie_dim) || 0) + (parseFloat(h.h_ferie_dim_nuit) || 0)) * 100) / 100,
+        total_heures: Math.round(totalH * 100) / 100,
+        abs_jours:    absJours,
+        frais_nb:     parseInt(frais.nb) || 0,
+        frais_total:  Math.round((parseFloat(frais.total) || 0) * 100) / 100,
+        cp_solde:     Math.round((parseFloat(cp.balance) || 0) * 10) / 10,
+        brut_estime:  brutEstime > 0 ? Math.round(brutEstime * 100) / 100 : '',
+      };
+    }));
+
+    const columns = [
+      { key: 'matricule',    label: 'Matricule' },
+      { key: 'nom',          label: 'Nom' },
+      { key: 'prenom',       label: 'Prénom' },
+      { key: 'contrat',      label: 'Contrat' },
+      { key: 'nb_vacations', label: 'Nb vacations' },
+      { key: 'h_jour',       label: 'H. jour' },
+      { key: 'h_nuit',       label: 'H. nuit' },
+      { key: 'h_dim',        label: 'H. dimanche' },
+      { key: 'h_ferie',      label: 'H. fériés' },
+      { key: 'total_heures', label: 'Total heures' },
+      { key: 'abs_jours',    label: 'Jours absents' },
+      { key: 'frais_nb',     label: 'Nb frais' },
+      { key: 'frais_total',  label: 'Frais approuvés (€)' },
+      { key: 'cp_solde',     label: 'Solde CP (j)' },
+      { key: 'brut_estime',  label: 'Brut estimé (€)' },
+    ];
+
+    logAudit(req, { action: 'EXPORT', entityType: 'paie', details: { month, format, count: rows.length } });
+
+    const filename = `paie_${month}`;
+    if (format === 'xlsx' || format === 'xls') {
+      return toXLS(res, rows, columns, `Paie ${month}`, `${filename}.xls`);
+    }
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}.csv"`);
+    res.send(toCSV(rows, columns));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

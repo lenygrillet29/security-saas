@@ -121,6 +121,15 @@ export default function RecapHeures() {
             Heures jour · nuit · dimanche · fériées par agent
           </p>
         </div>
+        {/* Bouton export paie consolidé */}
+        <button
+          onClick={() => exportApi.paie(`${year}-${String(month).padStart(2,'0')}`)}
+          disabled={!data?.agents?.length}
+          className="btn-primary flex items-center gap-2 disabled:opacity-40"
+          title="Export Excel consolidé heures + frais + CP"
+        >
+          <FileSpreadsheet className="w-4 h-4" /> Export paie
+        </button>
         {/* Bouton export split CSV / Excel */}
         <div className="relative" ref={exportRef}>
           <div className="flex">
