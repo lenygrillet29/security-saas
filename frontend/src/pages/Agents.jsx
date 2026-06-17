@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Plus, Edit2, Trash2, Phone, Mail, Search, Download, Archive, ArchiveRestore, Send, AlertTriangle, Zap, Smartphone, User, MapPin, CreditCard, Shield, CalendarDays, ChevronDown, ChevronUp, Camera, X, BadgeCheck } from 'lucide-react';
+import { Plus, Edit2, Trash2, Phone, Mail, Search, Download, Archive, ArchiveRestore, Send, AlertTriangle, Zap, Smartphone, User, MapPin, CreditCard, Shield, CalendarDays, ChevronDown, ChevronUp, Camera, X, BadgeCheck, Upload, CheckCircle } from 'lucide-react';
 import { agentsApi, shiftsApi, pdfApi, emailApi, addonsApi } from '../api';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Modal from '../components/Modal';
@@ -283,6 +283,125 @@ function AgentForm({ agent, onSave, onClose }) {
   );
 }
 
+// ─── Modal import CSV ─────────────────────────────────────────────────────────
+function ImportModal({ onClose, onDone }) {
+  const toast = useToast();
+  const [step, setStep]       = useState('pick'); // 'pick' | 'preview' | 'done'
+  const [rows, setRows]       = useState([]);
+  const [result, setResult]   = useState(null);
+  const [loading, setLoading] = useState(false);
+  const fileRef = useRef(null);
+
+  function parseCSV(text) {
+    const lines = text.trim().split(/\r?\n/);
+    if (lines.length < 2) return [];
+    const headers = lines[0].split(/[,;]/).map(h => h.replace(/^"|"$/g, '').trim());
+    return lines.slice(1).map(line => {
+      const vals = line.split(/[,;]/).map(v => v.replace(/^"|"$/g, '').trim());
+      return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? '']));
+    }).filter(r => Object.values(r).some(v => v));
+  }
+
+  function handleFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const parsed = parseCSV(ev.target.result);
+      setRows(parsed);
+      setStep('preview');
+    };
+    reader.readAsText(file, 'UTF-8');
+  }
+
+  async function doImport() {
+    setLoading(true);
+    try {
+      const res = await agentsApi.import(rows);
+      setResult(res);
+      setStep('done');
+      if (res.created > 0) onDone();
+    } catch (e) { toast(e.message, 'error'); }
+    finally { setLoading(false); }
+  }
+
+  const PREVIEW_COLS = ['first_name', 'last_name', 'email', 'phone', 'employee_number', 'contract_type'];
+  const colLabel = { first_name: 'Prénom', last_name: 'Nom', email: 'Email', phone: 'Tél', employee_number: 'Matricule', contract_type: 'Contrat' };
+
+  return (
+    <div className="space-y-4">
+      {step === 'pick' && (
+        <>
+          <div className="bg-dark-700 rounded-xl p-4 text-sm text-slate-400 space-y-2">
+            <p className="font-medium text-slate-200">Format CSV attendu</p>
+            <p>Colonnes (ordre libre, séparateur <code className="text-blue-400">,</code> ou <code className="text-blue-400">;</code>) :</p>
+            <code className="block text-xs text-slate-300 bg-dark-800 rounded p-2">
+              first_name, last_name, email, phone, employee_number, contract_type, hourly_rate, carte_pro, carte_pro_expiry
+            </code>
+            <p className="text-xs">Seuls <strong>first_name</strong> (ou prénom) et <strong>last_name</strong> (ou nom) sont obligatoires.</p>
+          </div>
+          <input ref={fileRef} type="file" accept=".csv,.txt" className="hidden" onChange={handleFile} />
+          <button className="btn-primary w-full flex items-center justify-center gap-2" onClick={() => fileRef.current.click()}>
+            <Upload className="w-4 h-4" /> Choisir un fichier CSV
+          </button>
+        </>
+      )}
+
+      {step === 'preview' && (
+        <>
+          <p className="text-sm text-slate-400">{rows.length} agent(s) détecté(s) — aperçu :</p>
+          <div className="overflow-x-auto max-h-64 border border-dark-600 rounded-xl">
+            <table className="w-full text-xs">
+              <thead className="bg-dark-700 sticky top-0">
+                <tr>{PREVIEW_COLS.filter(c => rows[0]?.[c] !== undefined || rows[0]?.['prenom'] !== undefined).map(c => (
+                  <th key={c} className="px-3 py-2 text-left text-slate-400 font-medium">{colLabel[c]}</th>
+                ))}</tr>
+              </thead>
+              <tbody>
+                {rows.slice(0, 10).map((r, i) => (
+                  <tr key={i} className="border-t border-dark-700">
+                    <td className="px-3 py-1.5 text-slate-300">{r.first_name || r.prenom || r['prénom']}</td>
+                    <td className="px-3 py-1.5 text-slate-300">{r.last_name || r.nom}</td>
+                    <td className="px-3 py-1.5 text-slate-500">{r.email}</td>
+                    <td className="px-3 py-1.5 text-slate-500">{r.phone || r.tel}</td>
+                    <td className="px-3 py-1.5 text-slate-500">{r.employee_number || r.matricule}</td>
+                    <td className="px-3 py-1.5 text-slate-500">{r.contract_type || r.contrat || 'CDI'}</td>
+                  </tr>
+                ))}
+                {rows.length > 10 && (
+                  <tr><td colSpan={6} className="px-3 py-2 text-slate-500 text-center">…et {rows.length - 10} autre(s)</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex gap-2">
+            <button className="btn-secondary flex-1" onClick={() => setStep('pick')}>Changer de fichier</button>
+            <button className="btn-primary flex-1 flex items-center justify-center gap-2" onClick={doImport} disabled={loading}>
+              {loading ? 'Import en cours…' : `Importer ${rows.length} agent(s)`}
+            </button>
+          </div>
+        </>
+      )}
+
+      {step === 'done' && result && (
+        <div className="text-center py-4 space-y-3">
+          <CheckCircle className="w-12 h-12 text-emerald-400 mx-auto" />
+          <div>
+            <p className="text-white font-semibold text-lg">{result.created} agent(s) importé(s)</p>
+            {result.skipped > 0 && <p className="text-slate-400 text-sm">{result.skipped} ignoré(s) (doublon ou données manquantes)</p>}
+          </div>
+          {result.errors?.length > 0 && (
+            <div className="text-left bg-dark-700 rounded-xl p-3 max-h-32 overflow-y-auto">
+              {result.errors.map((e, i) => <p key={i} className="text-xs text-amber-400">{e}</p>)}
+            </div>
+          )}
+          <button className="btn-primary w-full" onClick={onClose}>Fermer</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AgentsInner() {
   const toast = useToast();
   const navigate = useNavigate();
@@ -291,6 +410,7 @@ function AgentsInner() {
   const [search, setSearch] = useState('');
   const [showArchived, setShowArchived] = useState(false);
   const [modal, setModal] = useState(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
   const [archiveId, setArchiveId] = useState(null);
   const [monthStats, setMonthStats] = useState({});
@@ -375,9 +495,14 @@ function AgentsInner() {
     <div className="space-y-5 animate-fade-in">
       <div className="page-header">
         <h1 className="page-title">Agents</h1>
-        <button className="btn-primary" onClick={() => setModal({ agent: null })}>
-          <Plus className="w-4 h-4" /> Nouvel agent
-        </button>
+        <div className="flex gap-2">
+          <button className="btn-secondary flex items-center gap-2" onClick={() => setImportOpen(true)}>
+            <Upload className="w-4 h-4" /> Importer CSV
+          </button>
+          <button className="btn-primary flex items-center gap-2" onClick={() => setModal({ agent: null })}>
+            <Plus className="w-4 h-4" /> Nouvel agent
+          </button>
+        </div>
       </div>
 
       <div className="card p-4">
@@ -558,6 +683,11 @@ function AgentsInner() {
         </div>
       </div>
 
+      {importOpen && (
+        <Modal title="Importer des agents (CSV)" onClose={() => setImportOpen(false)}>
+          <ImportModal onClose={() => setImportOpen(false)} onDone={load} />
+        </Modal>
+      )}
       {modal && (
         <Modal title={modal.agent ? 'Modifier l\'agent' : 'Nouvel agent'} onClose={() => setModal(null)} size="xl">
           <AgentForm agent={modal.agent} onSave={() => { setModal(null); load(); }} onClose={() => setModal(null)} />

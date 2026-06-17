@@ -5,6 +5,7 @@ const { sendSMS } = require('../utils/smsService');
 const templates = require('../utils/emailTemplates');
 const { sendInvoiceReminders } = require('./invoiceReminders');
 const { sendCarteProAlerts }   = require('./carteProAlerts');
+const { sendTimedReminders }   = require('../routes/agent-portal');
 
 function frDate(d) {
   return new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -101,7 +102,10 @@ function startScheduler() {
   // Alertes carte pro — tous les jours à 8h00 (Paris)
   cron.schedule('0 8 * * *', sendCarteProAlerts, { timezone: 'Europe/Paris' });
 
-  console.log('[Scheduler] Démarré — rappels essai (9h00) · SMS shifts (18h00) · relances factures (9h30) · alertes carte pro (8h00)');
+  // Notifications push agents — toutes les 15 min (rappels J-1 et H-2)
+  cron.schedule('*/15 * * * *', sendTimedReminders, { timezone: 'Europe/Paris' });
+
+  console.log('[Scheduler] Démarré — rappels essai (9h00) · SMS shifts (18h00) · relances factures (9h30) · alertes carte pro (8h00) · push agents (*/15min)');
 }
 
 module.exports = { startScheduler, sendTrialReminders, sendShiftSMSReminders };

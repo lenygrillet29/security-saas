@@ -250,4 +250,56 @@ router.get('/carte-pro-alerts', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── POST /api/agents/import — import CSV ─────────────────────────────────────
+// Colonnes attendues (ordre libre, noms insensibles à la casse) :
+// first_name, last_name, email, phone, employee_number, contract_type, hourly_rate, carte_pro, carte_pro_expiry
+router.post('/import', requireWriter, async (req, res) => {
+  try {
+    const { rows } = req.body; // tableau d'objets parsé côté frontend
+    if (!Array.isArray(rows) || rows.length === 0) return res.status(400).json({ error: 'Aucune ligne à importer' });
+    if (rows.length > 200) return res.status(400).json({ error: 'Maximum 200 agents par import' });
+
+    const norm = k => k.trim().toLowerCase().replace(/\s+/g, '_');
+
+    let created = 0, skipped = 0;
+    const errors = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const raw = rows[i];
+      const r = Object.fromEntries(Object.entries(raw).map(([k, v]) => [norm(k), String(v ?? '').trim()]));
+
+      const first = r.first_name || r.prenom || r['prénom'] || '';
+      const last  = r.last_name  || r.nom    || '';
+      if (!first || !last) { skipped++; errors.push(`Ligne ${i + 2} : prénom ou nom manquant`); continue; }
+
+      // Doublon par nom + prénom
+      const exists = await db.get(
+        'SELECT id FROM agents WHERE company_id = ? AND lower(first_name) = lower(?) AND lower(last_name) = lower(?)',
+        [req.user.companyId, first, last]
+      );
+      if (exists) { skipped++; errors.push(`Ligne ${i + 2} : ${first} ${last} existe déjà`); continue; }
+
+      await db.insert(
+        `INSERT INTO agents (company_id, first_name, last_name, email, phone, employee_number, contract_type, hourly_rate, carte_pro, carte_pro_expiry, active)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+        [
+          req.user.companyId,
+          first, last,
+          r.email            || null,
+          r.phone || r.tel   || null,
+          r.employee_number  || r.matricule || null,
+          r.contract_type    || r.contrat   || 'CDI',
+          parseFloat(r.hourly_rate || r.taux_horaire) || 0,
+          r.carte_pro        || null,
+          r.carte_pro_expiry || null,
+        ]
+      );
+      created++;
+    }
+
+    logAudit(req, { action: 'IMPORT', entityType: 'agent', details: `${created} agent(s) importé(s)` });
+    res.json({ created, skipped, errors });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

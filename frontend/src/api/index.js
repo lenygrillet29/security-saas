@@ -62,6 +62,7 @@ export const agentsApi = {
   sendPortal: (id) => post(`/agents/${id}/send-portal`, {}),
   available: (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/agents/available${q ? `?${q}` : ''}`); },
   carteProAlerts: () => get('/agents/carte-pro-alerts'),
+  import: (rows) => post('/agents/import', { rows }),
   uploadPhoto: (id, photo) => post(`/agents/${id}/photo`, { photo }),
   deletePhoto: (id) => del(`/agents/${id}/photo`),
 };
