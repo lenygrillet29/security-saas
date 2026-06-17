@@ -349,6 +349,27 @@ async function init() {
     ALTER TABLE agents ADD COLUMN IF NOT EXISTS photo         TEXT;
   `);
 
+  // ── Contrats de prestation clients ───────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS client_contracts (
+      id           SERIAL PRIMARY KEY,
+      company_id   INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      client_id    INTEGER NOT NULL REFERENCES clients(id) ON DELETE RESTRICT,
+      title        TEXT NOT NULL,
+      description  TEXT,
+      start_date   TEXT NOT NULL,
+      end_date     TEXT,
+      amount       REAL DEFAULT 0,
+      billing_type TEXT DEFAULT 'monthly',
+      status       TEXT DEFAULT 'draft',
+      sign_token   TEXT UNIQUE,
+      signed_at    TIMESTAMP,
+      signed_ip    TEXT,
+      notes        TEXT,
+      created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   // ── Abonnements notifications push agents ────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS agent_push_subscriptions (

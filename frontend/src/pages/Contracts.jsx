@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { FileText, Plus, Send, Trash2, CheckCircle, Clock, Edit2, ExternalLink } from 'lucide-react';
-import { contractsApi, agentsApi } from '../api';
+import { FileText, Plus, Send, Trash2, CheckCircle, Edit2, Users, Building2 } from 'lucide-react';
+import { contractsApi, agentsApi, clientContractsApi, clientsApi } from '../api';
 import Modal from '../components/Modal';
 import Confirm from '../components/Confirm';
 import { ToastProvider, useToast } from '../components/Toast';
@@ -112,8 +112,223 @@ function ContractForm({ contract, agents, onSave, onClose }) {
   );
 }
 
+// ─── Formulaire contrat client ────────────────────────────────────────────────
+const BILLING_OPTIONS = [
+  { value: 'monthly',  label: 'Mensuel' },
+  { value: 'yearly',   label: 'Annuel' },
+  { value: 'one_time', label: 'Forfait unique' },
+  { value: 'hourly',   label: 'À l\'heure' },
+];
+
+function ClientContractForm({ contract, clients, onSave, onClose }) {
+  const toast = useToast();
+  const [form, setForm] = useState({
+    client_id:    contract?.client_id    || '',
+    title:        contract?.title        || '',
+    description:  contract?.description  || '',
+    start_date:   contract?.start_date   || '',
+    end_date:     contract?.end_date     || '',
+    amount:       contract?.amount       || '',
+    billing_type: contract?.billing_type || 'monthly',
+    notes:        contract?.notes        || '',
+  });
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    try {
+      if (contract?.id) {
+        await clientContractsApi.update(contract.id, form);
+        toast('Contrat modifié');
+      } else {
+        await clientContractsApi.create(form);
+        toast('Contrat créé');
+      }
+      onSave();
+    } catch (err) { toast(err.message, 'error'); }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="label">Client *</label>
+          <select className="input" value={form.client_id} onChange={e => set('client_id', e.target.value)} required>
+            <option value="">Sélectionner...</option>
+            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="label">Facturation</label>
+          <select className="input" value={form.billing_type} onChange={e => set('billing_type', e.target.value)}>
+            {BILLING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label className="label">Intitulé du contrat *</label>
+        <input className="input" value={form.title} onChange={e => set('title', e.target.value)} placeholder="Ex : Contrat de gardiennage 2026" required />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="label">Date de début *</label>
+          <input type="date" className="input" value={form.start_date} onChange={e => set('start_date', e.target.value)} required />
+        </div>
+        <div>
+          <label className="label">Date de fin</label>
+          <input type="date" className="input" value={form.end_date} onChange={e => set('end_date', e.target.value)} />
+        </div>
+      </div>
+
+      <div>
+        <label className="label">Montant HT (€)</label>
+        <input type="number" step="0.01" className="input" value={form.amount} onChange={e => set('amount', e.target.value)} placeholder="Ex : 5000" />
+      </div>
+
+      <div>
+        <label className="label">Description des prestations</label>
+        <textarea className="input" rows={4} value={form.description} onChange={e => set('description', e.target.value)} placeholder="Détail des services, conditions particulières..." />
+      </div>
+
+      <div>
+        <label className="label">Notes internes</label>
+        <textarea className="input" rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} />
+      </div>
+
+      <div className="flex justify-end gap-2 pt-2">
+        <button type="button" className="btn-secondary" onClick={onClose}>Annuler</button>
+        <button type="submit" className="btn-primary">{contract?.id ? 'Modifier' : 'Créer'}</button>
+      </div>
+    </form>
+  );
+}
+
+// ─── Section contrats clients ──────────────────────────────────────────────────
+function ClientContractsSection() {
+  const toast = useToast();
+  const [contracts, setContracts] = useState([]);
+  const [clients, setClients]     = useState([]);
+  const [modal, setModal]         = useState(null);
+  const [deleteId, setDeleteId]   = useState(null);
+  const [sendingId, setSendingId] = useState(null);
+
+  const load = async () => {
+    const [cc, cl] = await Promise.all([clientContractsApi.list(), clientsApi.list()]);
+    setContracts(cc);
+    setClients(cl);
+  };
+  useEffect(() => { load(); }, []);
+
+  async function handleSend(c) {
+    if (!window.confirm(`Envoyer le contrat à ${c.client_name} pour signature électronique ?`)) return;
+    setSendingId(c.id);
+    try {
+      await clientContractsApi.send(c.id);
+      toast('Email de signature envoyé !');
+      await load();
+    } catch (e) { toast(e.message, 'error'); }
+    finally { setSendingId(null); }
+  }
+
+  async function handleDelete(id) {
+    try {
+      await clientContractsApi.delete(id);
+      toast('Contrat supprimé');
+      await load();
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <button className="btn-primary flex items-center gap-2" onClick={() => setModal({ type: 'create' })}>
+          <Plus className="w-4 h-4" /> Nouveau contrat client
+        </button>
+      </div>
+
+      {contracts.length === 0 ? (
+        <div className="text-center py-16 text-slate-500">
+          <Building2 className="w-12 h-12 mx-auto mb-3 opacity-30" />
+          <p>Aucun contrat client</p>
+          <button className="mt-4 btn-primary" onClick={() => setModal({ type: 'create' })}>Créer le premier</button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {contracts.map(c => {
+            const st = STATUS_LABELS[c.status] || STATUS_LABELS.draft;
+            return (
+              <div key={c.id} className="bg-dark-800 border border-dark-600 rounded-xl p-4 flex items-center gap-4">
+                <div className="w-10 h-10 rounded-lg bg-emerald-600/20 border border-emerald-600/30 flex items-center justify-center shrink-0">
+                  <Building2 className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-white font-medium text-sm">{c.client_name}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded font-medium ${st.color}`}>{st.label}</span>
+                  </div>
+                  <div className="text-xs text-slate-500 mt-0.5">
+                    {c.title}
+                    {c.amount > 0 && ` · ${Number(c.amount).toLocaleString('fr-FR')} € HT`}
+                    {' · Début '}{new Date(c.start_date).toLocaleDateString('fr-FR')}
+                    {c.end_date && ` → ${new Date(c.end_date).toLocaleDateString('fr-FR')}`}
+                  </div>
+                  {c.status === 'signed' && c.signed_at && (
+                    <div className="text-xs text-emerald-400 mt-0.5 flex items-center gap-1">
+                      <CheckCircle className="w-3 h-3" />
+                      Signé le {new Date(c.signed_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {c.status !== 'signed' && (
+                    <>
+                      <button onClick={() => setModal({ type: 'edit', data: c })} className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-dark-700 transition-colors" title="Modifier">
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => handleSend(c)} disabled={sendingId === c.id} className="p-2 rounded-lg text-slate-400 hover:text-blue-400 hover:bg-blue-400/10 transition-colors disabled:opacity-50" title="Envoyer pour signature">
+                        <Send className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
+                  {c.status !== 'signed' && (
+                    <button onClick={() => setDeleteId(c.id)} className="p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-400/10 transition-colors" title="Supprimer">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {modal && (
+        <Modal title={modal.type === 'create' ? 'Nouveau contrat client' : 'Modifier le contrat'} onClose={() => setModal(null)}>
+          <ClientContractForm
+            contract={modal.data}
+            clients={clients}
+            onSave={() => { setModal(null); load(); }}
+            onClose={() => setModal(null)}
+          />
+        </Modal>
+      )}
+      {deleteId && (
+        <Confirm
+          message="Supprimer ce contrat définitivement ?"
+          onConfirm={() => { handleDelete(deleteId); setDeleteId(null); }}
+          onCancel={() => setDeleteId(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Inner principal avec onglets ─────────────────────────────────────────────
 function ContractsInner() {
   const toast = useToast();
+  const [tab, setTab] = useState('clients'); // 'agents' | 'clients'
   const [contracts, setContracts] = useState([]);
   const [agents, setAgents] = useState([]);
   const [modal, setModal] = useState(null); // { type: 'create'|'edit', data }
@@ -155,15 +370,36 @@ function ContractsInner() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-white">Contrats de travail</h1>
-          <p className="text-sm text-slate-400 mt-0.5">CDI, CDD et avenants — signature électronique intégrée</p>
+          <h1 className="text-xl font-bold text-white">Contrats</h1>
+          <p className="text-sm text-slate-400 mt-0.5">Contrats clients et agents — signature électronique intégrée</p>
         </div>
-        <button className="btn-primary flex items-center gap-2" onClick={() => setModal({ type: 'create' })}>
-          <Plus className="w-4 h-4" /> Nouveau contrat
+      </div>
+
+      {/* Onglets */}
+      <div className="flex gap-2 border-b border-dark-600 pb-0">
+        <button
+          onClick={() => setTab('clients')}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'clients' ? 'border-blue-500 text-white' : 'border-transparent text-slate-400 hover:text-white'}`}
+        >
+          <Building2 className="w-4 h-4" /> Clients
+        </button>
+        <button
+          onClick={() => setTab('agents')}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'agents' ? 'border-blue-500 text-white' : 'border-transparent text-slate-400 hover:text-white'}`}
+        >
+          <Users className="w-4 h-4" /> Agents
         </button>
       </div>
 
-      {/* Filtres */}
+      {tab === 'clients' && <ClientContractsSection />}
+
+      {tab === 'agents' && <>
+      <div className="flex justify-end">
+        <button className="btn-primary flex items-center gap-2" onClick={() => setModal({ type: 'create' })}>
+          <Plus className="w-4 h-4" /> Nouveau contrat agent
+        </button>
+      </div>
+      {/* Filtres agents */}
       <div className="flex gap-2 flex-wrap">
         {['all', 'CDI', 'CDD', 'avenant', 'draft', 'sent', 'signed'].map(f => (
           <button key={f}
@@ -266,6 +502,7 @@ function ContractsInner() {
           onCancel={() => setDeleteId(null)}
         />
       )}
+      </>}
     </div>
   );
 }

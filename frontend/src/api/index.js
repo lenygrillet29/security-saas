@@ -198,7 +198,7 @@ export const billingApi = {
   reactivate: () => post('/billing/reactivate', {}),
 };
 
-// Contracts
+// Contracts agents
 export const contractsApi = {
   list: () => get('/contracts'),
   get: (id) => get(`/contracts/${id}`),
@@ -208,6 +208,18 @@ export const contractsApi = {
   send: (id) => post(`/contracts/${id}/send`, {}),
   getByToken: (token) => fetch(`${BASE}/contracts/sign/${token}`).then(r => r.json()),
   signByToken: (token) => fetch(`${BASE}/contracts/sign/${token}`, { method: 'POST' }).then(r => r.json()),
+};
+
+// Contrats clients (prestation)
+export const clientContractsApi = {
+  list: () => get('/client-contracts'),
+  get: (id) => get(`/client-contracts/${id}`),
+  create: (data) => post('/client-contracts', data),
+  update: (id, data) => put(`/client-contracts/${id}`, data),
+  delete: (id) => del(`/client-contracts/${id}`),
+  send: (id) => post(`/client-contracts/${id}/send`, {}),
+  getByToken: (token) => fetch(`${BASE}/client-contracts/sign/${token}`).then(r => r.json()),
+  signByToken: (token) => fetch(`${BASE}/client-contracts/sign/${token}`, { method: 'POST' }).then(r => r.json()),
 };
 
 // Invoices

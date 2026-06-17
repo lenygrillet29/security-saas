@@ -16,6 +16,7 @@ import Settings from './pages/Settings';
 import Billing from './pages/Billing';
 import Contracts from './pages/Contracts';
 import SignContract from './pages/SignContract';
+import SignClientContract from './pages/SignClientContract';
 import Invoices from './pages/Invoices';
 import AuditLog from './pages/AuditLog';
 import Simulation from './pages/Simulation';
@@ -58,8 +59,9 @@ export default function App() {
             {/* Pages publiques */}
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
-            {/* Page de signature de contrat (publique) */}
+            {/* Pages de signature de contrat (publiques) */}
             <Route path="/sign-contract/:token" element={<SignContract />} />
+            <Route path="/sign-client-contract/:token" element={<SignClientContract />} />
             {/* Portail client (public, sans compte) */}
             <Route path="/portal/:token" element={<ClientPortal />} />
             {/* Portail agent mobile (public, sans compte) */}

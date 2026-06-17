@@ -46,6 +46,7 @@ app.use('/api/auth', require('./routes/auth'));
 
 // ─── Signature de contrat (public — token dans l'URL) ────────────────────────
 app.use('/api/contracts/sign', require('./routes/contracts'));
+app.use('/api/client-contracts/sign', require('./routes/client-contracts'));
 
 // ─── Portail client public (token dans l'URL, pas de JWT) ────────────────────
 app.use('/api/portal', require('./routes/portal'));
@@ -104,7 +105,8 @@ app.use('/api/pdf',      require('./routes/pdf'));
 app.use('/api/email',    require('./routes/email'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/billing',   require('./routes/billing'));   // /subscription, /cancel, /reactivate
-app.use('/api/contracts', require('./routes/contracts')); // CRUD + envoi + signature
+app.use('/api/contracts', require('./routes/contracts'));               // CRUD + envoi + signature agents
+app.use('/api/client-contracts', require('./routes/client-contracts')); // CRUD + envoi + signature clients
 app.use('/api/invoices',  require('./routes/invoices'));  // Facturation
 app.use('/api/audit',    require('./routes/audit'));     // Journal d'audit
 app.use('/api/export',   require('./routes/export'));    // Export CSV comptable
