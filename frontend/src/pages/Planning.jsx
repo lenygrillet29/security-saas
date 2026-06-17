@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   format, startOfWeek, endOfWeek, addWeeks, subWeeks,
   startOfMonth, endOfMonth, addMonths, subMonths,
-  eachDayOfInterval, isSameDay, parseISO, getDay
+  eachDayOfInterval, isSameDay, parseISO, getDay, addDays
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Plus, Download, Mail, Trash2, Edit2, Send, Users, AlertTriangle, RefreshCw, X, ExternalLink, Copy } from 'lucide-react';
@@ -108,6 +108,8 @@ function QuickSiteModal({ onClose, onCreated, defaultClientId }) {
   );
 }
 
+const WEEKDAY_LABELS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+
 function ShiftForm({ shift, agents, sites: initialSites, onSave, onClose }) {
   const toast = useToast();
   const [sites, setSites] = useState(initialSites);
@@ -121,8 +123,22 @@ function ShiftForm({ shift, agents, sites: initialSites, onSave, onClose }) {
   });
   const [quickClient, setQuickClient] = useState(false);
   const [quickSite, setQuickSite] = useState(false);
+  const [repeat, setRepeat] = useState(false);
+  const [recur, setRecur] = useState({
+    frequency: 'weekly',
+    weekdays: [],
+    until_date: format(addWeeks(new Date(), 4), 'yyyy-MM-dd'),
+  });
 
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  const setR = (k, v) => setRecur(p => ({ ...p, [k]: v }));
+
+  function toggleWeekday(d) {
+    setRecur(p => ({
+      ...p,
+      weekdays: p.weekdays.includes(d) ? p.weekdays.filter(x => x !== d) : [...p.weekdays, d],
+    }));
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -131,6 +147,17 @@ function ShiftForm({ shift, agents, sites: initialSites, onSave, onClose }) {
       if (shift?.id) {
         await shiftsApi.update(shift.id, payload);
         toast('Shift modifié avec succès');
+      } else if (repeat) {
+        if (recur.frequency === 'custom' && recur.weekdays.length === 0)
+          return toast('Sélectionnez au moins un jour', 'error');
+        const res = await shiftsApi.createRecurring({
+          ...payload,
+          start_date: form.date,
+          until_date: recur.until_date,
+          frequency: recur.frequency,
+          weekdays: recur.weekdays,
+        });
+        toast(`${res.created} vacation${res.created > 1 ? 's' : ''} créée${res.created > 1 ? 's' : ''} ✅`);
       } else {
         await shiftsApi.create(payload);
         toast('Shift créé avec succès');
@@ -205,10 +232,86 @@ function ShiftForm({ shift, agents, sites: initialSites, onSave, onClose }) {
           <label className="label">Notes</label>
           <textarea className="input" rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} />
         </div>
+        {/* Récurrence — seulement à la création */}
+        {!shift?.id && (
+          <div className="border border-dark-600 rounded-xl overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setRepeat(v => !v)}
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-dark-700 transition-colors"
+            >
+              <span className="text-sm font-medium text-slate-300 flex items-center gap-2">
+                <RefreshCw className="w-4 h-4 text-slate-400" />
+                Répéter cette vacation
+              </span>
+              <div className={`w-9 h-5 rounded-full transition-colors relative ${repeat ? 'bg-blue-600' : 'bg-dark-500'}`}>
+                <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform shadow ${repeat ? 'translate-x-4' : 'translate-x-0.5'}`} />
+              </div>
+            </button>
+
+            {repeat && (
+              <div className="px-4 pb-4 space-y-3 border-t border-dark-600 pt-3 bg-dark-800/50">
+                <div>
+                  <label className="label">Fréquence</label>
+                  <div className="flex gap-2">
+                    {[
+                      { value: 'weekly',   label: 'Chaque semaine' },
+                      { value: 'biweekly', label: 'Toutes les 2 sem.' },
+                      { value: 'custom',   label: 'Jours précis' },
+                    ].map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setR('frequency', opt.value)}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+                          recur.frequency === opt.value
+                            ? 'bg-blue-600/20 border-blue-500/50 text-blue-300'
+                            : 'border-dark-500 text-slate-400 hover:text-white hover:bg-dark-700'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {recur.frequency === 'custom' && (
+                  <div>
+                    <label className="label">Jours de la semaine</label>
+                    <div className="flex gap-1.5">
+                      {WEEKDAY_LABELS.map((label, d) => (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => toggleWeekday(d)}
+                          className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
+                            recur.weekdays.includes(d)
+                              ? 'bg-blue-600/30 border-blue-500/50 text-blue-300'
+                              : 'border-dark-500 text-slate-500 hover:text-white hover:bg-dark-700'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="label">Répéter jusqu'au</label>
+                  <input type="date" className="input" value={recur.until_date}
+                    min={form.date}
+                    onChange={e => setR('until_date', e.target.value)} />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" className="btn-secondary" onClick={onClose}>Annuler</button>
           <button type="submit" className="btn-primary">
-            {shift?.id ? 'Modifier' : 'Créer le shift'}
+            {shift?.id ? 'Modifier' : repeat ? 'Créer la série' : 'Créer le shift'}
           </button>
         </div>
       </form>
@@ -691,6 +794,7 @@ function WeeklyView({ days, shifts, absences, agents, onAddShift, onEditShift, o
                                 </button>
                               )}
                               {shift.start_time}–{shift.end_time}
+                              {shift.recurrence_id && <RefreshCw className="w-2 h-2 opacity-60 shrink-0" />}
                             </span>
                             <div className="hidden group-hover:flex gap-0.5 ml-1">
                               <button onClick={() => onEditShift(shift)} className="hover:text-white p-0.5 rounded">
@@ -1015,6 +1119,7 @@ function PlanningInner() {
   const [sites, setSites] = useState([]);
   const [shiftModal, setShiftModal] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
+  const [deleteRecurModal, setDeleteRecurModal] = useState(null); // { id, recurrence_id, date }
   const [exportModal, setExportModal] = useState(false);
   const [replacementShift, setReplacementShift] = useState(null);
   const [offerShift, setOfferShift] = useState(null); // shift pour lequel envoyer des offres
@@ -1084,9 +1189,40 @@ function PlanningInner() {
     try {
       await shiftsApi.delete(deleteId);
       toast('Shift supprimé');
+      setDeleteId(null);
       fetchData();
     } catch (err) {
       toast(err.message, 'error');
+    }
+  }
+
+  async function handleDeleteRecur(mode) {
+    // mode: 'single' | 'from_here' | 'all'
+    const { id, recurrence_id, date } = deleteRecurModal;
+    try {
+      if (mode === 'single') {
+        await shiftsApi.delete(id);
+        toast('Vacation supprimée');
+      } else if (mode === 'from_here') {
+        await shiftsApi.deleteRecurrence(recurrence_id, date);
+        toast('Vacations suivantes supprimées');
+      } else {
+        await shiftsApi.deleteRecurrence(recurrence_id);
+        toast('Toute la série supprimée');
+      }
+      setDeleteRecurModal(null);
+      fetchData();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+
+  function requestDelete(shiftId) {
+    const shift = shifts.find(s => s.id === shiftId);
+    if (shift?.recurrence_id) {
+      setDeleteRecurModal({ id: shiftId, recurrence_id: shift.recurrence_id, date: shift.date });
+    } else {
+      setDeleteId(shiftId);
     }
   }
 
@@ -1156,7 +1292,7 @@ function PlanningInner() {
             agents={agents}
             onAddShift={openAdd}
             onEditShift={openEdit}
-            onDeleteShift={setDeleteId}
+            onDeleteShift={requestDelete}
             onOpenAgent={agent => setQuickViewId(agent.id)}
             onReplaceShift={setReplacementShift}
             onSendOffer={setOfferShift}
@@ -1170,7 +1306,7 @@ function PlanningInner() {
             agents={agents}
             onAddShift={openAdd}
             onEditShift={openEdit}
-            onDeleteShift={setDeleteId}
+            onDeleteShift={requestDelete}
           />
         )}
       </div>
@@ -1229,6 +1365,32 @@ function PlanningInner() {
         />
       )}
       {quickViewId && <AgentQuickView agentId={quickViewId} onClose={() => setQuickViewId(null)} />}
+
+      {deleteRecurModal && (
+        <Modal title="Supprimer la vacation" onClose={() => setDeleteRecurModal(null)} size="sm">
+          <p className="text-sm text-slate-400 mb-5">Cette vacation fait partie d'une série récurrente. Que voulez-vous supprimer ?</p>
+          <div className="space-y-2">
+            <button onClick={() => handleDeleteRecur('single')}
+              className="w-full text-left px-4 py-3 rounded-xl border border-dark-600 hover:bg-dark-700 transition-colors">
+              <div className="text-sm font-medium text-white">Cette vacation uniquement</div>
+              <div className="text-xs text-slate-500 mt-0.5">Supprime seulement ce créneau</div>
+            </button>
+            <button onClick={() => handleDeleteRecur('from_here')}
+              className="w-full text-left px-4 py-3 rounded-xl border border-amber-600/30 hover:bg-amber-600/10 transition-colors">
+              <div className="text-sm font-medium text-amber-300">Cette vacation et les suivantes</div>
+              <div className="text-xs text-slate-500 mt-0.5">Supprime à partir de cette date jusqu'à la fin</div>
+            </button>
+            <button onClick={() => handleDeleteRecur('all')}
+              className="w-full text-left px-4 py-3 rounded-xl border border-red-600/30 hover:bg-red-600/10 transition-colors">
+              <div className="text-sm font-medium text-red-400">Toute la série</div>
+              <div className="text-xs text-slate-500 mt-0.5">Supprime toutes les occurrences passées et futures</div>
+            </button>
+          </div>
+          <div className="mt-4 flex justify-end">
+            <button onClick={() => setDeleteRecurModal(null)} className="btn-secondary">Annuler</button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

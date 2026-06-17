@@ -100,6 +100,11 @@ export const shiftsApi = {
   },
   replacements: (id) => get(`/shifts/${id}/replacements`),
   copyDay: (from_date, to_date, copy_agents) => post('/shifts/copy-day', { from_date, to_date, copy_agents }),
+  createRecurring: (data) => post('/shifts/recurring', data),
+  deleteRecurrence: (recurrenceId, from_date) => {
+    const q = from_date ? `?from_date=${from_date}` : '';
+    return del(`/shifts/recurrence/${recurrenceId}${q}`);
+  },
 };
 
 // Absences

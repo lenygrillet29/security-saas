@@ -341,6 +341,7 @@ async function init() {
     ALTER TABLE agents ADD COLUMN IF NOT EXISTS birth_place   TEXT;
     ALTER TABLE agents ADD COLUMN IF NOT EXISTS nationality   TEXT;
     ALTER TABLE agents ADD COLUMN IF NOT EXISTS carte_vitale  TEXT;
+    ALTER TABLE shifts ADD COLUMN IF NOT EXISTS recurrence_id TEXT;
     ALTER TABLE agents ADD COLUMN IF NOT EXISTS carte_pro        TEXT;
     ALTER TABLE agents ADD COLUMN IF NOT EXISTS carte_pro_expiry TEXT;
     ALTER TABLE agents ADD COLUMN IF NOT EXISTS entry_date    TEXT;

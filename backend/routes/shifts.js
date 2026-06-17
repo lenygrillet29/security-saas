@@ -440,4 +440,79 @@ router.post('/copy-day', requireWriter, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// POST /api/shifts/recurring — crée une série de shifts récurrents
+router.post('/recurring', requireWriter, async (req, res) => {
+  try {
+    const { agent_id, site_id, start_time, end_time, notes,
+            start_date, until_date, frequency, weekdays } = req.body;
+    // frequency: 'weekly' | 'biweekly' | 'custom'
+    // weekdays: [0-6] (0=dim) utilisé si frequency='custom'
+    if (!site_id || !start_date || !until_date || !start_time || !end_time || !frequency)
+      return res.status(400).json({ error: 'Champs requis manquants' });
+
+    const { randomUUID } = require('crypto');
+    const recurrenceId = randomUUID();
+
+    const dates = [];
+    const current = new Date(start_date + 'T12:00:00Z');
+    const until   = new Date(until_date + 'T12:00:00Z');
+
+    if (frequency === 'weekly' || frequency === 'biweekly') {
+      const step = frequency === 'biweekly' ? 14 : 7;
+      let d = new Date(current);
+      while (d <= until) {
+        dates.push(d.toISOString().slice(0, 10));
+        d = new Date(d.getTime() + step * 86400000);
+      }
+    } else if (frequency === 'custom' && Array.isArray(weekdays) && weekdays.length > 0) {
+      let d = new Date(current);
+      // Reculer au début de la semaine contenant start_date
+      while (d <= until) {
+        if (weekdays.includes(d.getUTCDay())) {
+          const dateStr = d.toISOString().slice(0, 10);
+          if (dateStr >= start_date) dates.push(dateStr);
+        }
+        d = new Date(d.getTime() + 86400000);
+      }
+    }
+
+    if (!dates.length) return res.status(400).json({ error: 'Aucune date générée avec ces paramètres' });
+    if (dates.length > 365) return res.status(400).json({ error: 'Maximum 365 occurrences' });
+
+    let created = 0;
+    for (const date of dates) {
+      const hours = calculateHours(date, start_time, end_time);
+      await db.insert(
+        `INSERT INTO shifts (company_id, agent_id, site_id, date, start_time, end_time,
+          hours_day, hours_night, hours_sunday, hours_sunday_night,
+          hours_holiday, hours_holiday_night, hours_holiday_sunday_day, hours_holiday_sunday_night,
+          notes, recurrence_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [req.user.companyId, agent_id || null, site_id, date, start_time, end_time,
+          hours.hours_day, hours.hours_night, hours.hours_sunday, hours.hours_sunday_night,
+          hours.hours_holiday, hours.hours_holiday_night,
+          hours.hours_holiday_sunday_day, hours.hours_holiday_sunday_night,
+          notes || null, recurrenceId]
+      );
+      created++;
+    }
+
+    logAudit(req, { action: 'CREATE_RECURRING', entityType: 'shifts', details: { recurrenceId, frequency, created } });
+    res.status(201).json({ success: true, recurrence_id: recurrenceId, created });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/shifts/recurrence/:recurrenceId — supprime toute la série
+router.delete('/recurrence/:recurrenceId', requireWriter, async (req, res) => {
+  try {
+    const { from_date } = req.query; // optionnel : supprimer seulement à partir de cette date
+    let query = 'DELETE FROM shifts WHERE recurrence_id = ? AND company_id = ?';
+    const params = [req.params.recurrenceId, req.user.companyId];
+    if (from_date) { query += ' AND date >= ?'; params.push(from_date); }
+    const { changes } = await db.run(query, params);
+    logAudit(req, { action: 'DELETE_RECURRING', entityType: 'shifts', details: { recurrenceId: req.params.recurrenceId, from_date, deleted: changes } });
+    res.json({ success: true, deleted: changes });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
