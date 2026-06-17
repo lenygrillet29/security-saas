@@ -7,7 +7,6 @@ const express  = require('express');
 const router   = express.Router();
 const { db }   = require('../db/database');
 const { logAudit } = require('../utils/audit');
-const ExcelJS  = require('exceljs');
 
 // ── CSV ──────────────────────────────────────────────────────────────────────
 function toCSV(rows, columns) {
@@ -22,50 +21,54 @@ function toCSV(rows, columns) {
   return '﻿' + [header, ...lines].join('\n'); // BOM UTF-8 pour Excel
 }
 
-// ── Excel ────────────────────────────────────────────────────────────────────
-async function toXLSX(res, rows, columns, sheetName, filename) {
-  const wb = new ExcelJS.Workbook();
-  wb.creator = 'SecuroPlan';
-  const ws = wb.addWorksheet(sheetName);
+// ── Excel XML (SpreadsheetML — aucune dépendance) ────────────────────────────
+function toXLS(res, rows, columns, sheetName, filename) {
+  const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-  ws.columns = columns.map(c => ({
-    header: c.label,
-    key:    c.key,
-    width:  Math.max(c.label.length + 4, 14),
-  }));
+  const headerCells = columns.map(c =>
+    `<Cell ss:StyleID="header"><Data ss:Type="String">${esc(c.label)}</Data></Cell>`
+  ).join('');
 
-  // En-tête en gras avec fond bleu foncé
-  ws.getRow(1).eachCell(cell => {
-    cell.font      = { bold: true, color: { argb: 'FFFFFFFF' } };
-    cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
-    cell.alignment = { vertical: 'middle', horizontal: 'center' };
-  });
-  ws.getRow(1).height = 20;
+  const dataRows = rows.map((row, i) => {
+    const style = i % 2 === 0 ? 'even' : 'odd';
+    const cells = columns.map(c => {
+      const v = row[c.key] ?? '';
+      const isNum = v !== '' && !isNaN(v) && typeof v !== 'boolean';
+      return isNum
+        ? `<Cell ss:StyleID="${style}"><Data ss:Type="Number">${v}</Data></Cell>`
+        : `<Cell ss:StyleID="${style}"><Data ss:Type="String">${esc(v)}</Data></Cell>`;
+    }).join('');
+    return `<Row>${cells}</Row>`;
+  }).join('');
 
-  // Données
-  rows.forEach((row, i) => {
-    const r = ws.addRow(columns.map(c => row[c.key] ?? ''));
-    if (i % 2 === 1) {
-      r.eachCell(cell => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
-      });
-    }
-  });
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+  <Styles>
+    <Style ss:ID="header">
+      <Font ss:Bold="1" ss:Color="#FFFFFF"/>
+      <Interior ss:Color="#1E3A5F" ss:Pattern="Solid"/>
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+    </Style>
+    <Style ss:ID="even">
+      <Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/>
+    </Style>
+    <Style ss:ID="odd">
+      <Interior ss:Color="#F1F5F9" ss:Pattern="Solid"/>
+    </Style>
+  </Styles>
+  <Worksheet ss:Name="${esc(sheetName)}">
+    <Table>
+      <Row ss:Height="20">${headerCells}</Row>
+      ${dataRows}
+    </Table>
+  </Worksheet>
+</Workbook>`;
 
-  // Bordure légère sur toutes les cellules
-  ws.eachRow(r => r.eachCell(cell => {
-    cell.border = {
-      top:    { style: 'thin', color: { argb: 'FFE2E8F0' } },
-      bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-      left:   { style: 'thin', color: { argb: 'FFE2E8F0' } },
-      right:  { style: 'thin', color: { argb: 'FFE2E8F0' } },
-    };
-  }));
-
-  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-  await wb.xlsx.write(res);
-  res.end();
+  res.send(xml);
 }
 
 // ── Export shifts (prestations) ───────────────────────────────────────────────
@@ -116,7 +119,7 @@ router.get('/shifts', async (req, res) => {
     logAudit(req, { action: 'EXPORT', entityType: 'shifts', details: { start_date, end_date, format, count: rows.length } });
 
     if (format === 'xlsx') {
-      return toXLSX(res, rows, columns, 'Prestations', `prestations_${start_date}_${end_date}.xlsx`);
+      return toXLS(res, rows, columns, 'Prestations', `prestations_${start_date}_${end_date}.xls`);
     }
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="prestations_${start_date}_${end_date}.csv"`);
@@ -168,7 +171,7 @@ router.get('/invoices', async (req, res) => {
     logAudit(req, { action: 'EXPORT', entityType: 'invoices', details: { start_date, end_date, format, count: rows.length } });
 
     if (format === 'xlsx') {
-      return toXLSX(res, mapped, columns, 'Factures', `factures_${start_date}_${end_date}.xlsx`);
+      return toXLS(res, mapped, columns, 'Factures', `factures_${start_date}_${end_date}.xls`);
     }
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="factures_${start_date}_${end_date}.csv"`);
