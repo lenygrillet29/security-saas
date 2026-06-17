@@ -443,6 +443,26 @@ async function init() {
     );
   `);
 
+  // ── Equipements / dotations agents ────────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS equipments (
+      id           SERIAL PRIMARY KEY,
+      company_id   INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      agent_id     INTEGER NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+      category     TEXT NOT NULL DEFAULT 'tenue',
+      label        TEXT NOT NULL,
+      size         TEXT,
+      quantity     INTEGER NOT NULL DEFAULT 1,
+      condition    TEXT NOT NULL DEFAULT 'neuf',
+      issued_date  TEXT NOT NULL,
+      return_date  TEXT,
+      returned_at  TEXT,
+      serial_number TEXT,
+      notes        TEXT,
+      created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   // ── Demandes d'absence depuis le portail agent ───────────────────────────────
   await pool.query(`
     ALTER TABLE absences ADD COLUMN IF NOT EXISTS requested_by_agent INTEGER DEFAULT 0;

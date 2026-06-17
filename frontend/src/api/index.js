@@ -263,6 +263,17 @@ export const expensesApi = {
   reject:  (id, reason) => post(`/expenses/${id}/reject`, { reason }),
 };
 
+// Equipements
+export const equipmentsApi = {
+  list:   (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/equipments${q ? `?${q}` : ''}`); },
+  stats:  () => get('/equipments/stats'),
+  get:    (id) => get(`/equipments/${id}`),
+  create: (data) => post('/equipments', data),
+  update: (id, data) => put(`/equipments/${id}`, data),
+  return: (id, data) => post(`/equipments/${id}/return`, data || {}),
+  delete: (id) => del(`/equipments/${id}`),
+};
+
 // Audit
 export const auditApi = {
   list: (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/audit${q ? `?${q}` : ''}`); },

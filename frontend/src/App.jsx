@@ -21,6 +21,7 @@ import Invoices from './pages/Invoices';
 import Expenses from './pages/Expenses';
 import CongesPayes from './pages/CongesPayes';
 import RHDashboard from './pages/RHDashboard';
+import Equipements from './pages/Equipements';
 import AuditLog from './pages/AuditLog';
 import Simulation from './pages/Simulation';
 import RecapHeures from './pages/RecapHeures';
@@ -101,6 +102,7 @@ export default function App() {
               <Route path="expenses"   element={<Expenses />} />
               <Route path="conges"    element={<CongesPayes />} />
               <Route path="rh"        element={<RHDashboard />} />
+              <Route path="equipements" element={<Equipements />} />
               <Route path="audit"     element={<AuditLog />} />
               <Route path="simulation" element={<Simulation />} />
               <Route path="recap-heures" element={<RecapHeures />} />
