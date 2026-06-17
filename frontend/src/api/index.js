@@ -263,6 +263,17 @@ export const expensesApi = {
   reject:  (id, reason) => post(`/expenses/${id}/reject`, { reason }),
 };
 
+// Formations & habilitations
+export const trainingsApi = {
+  list:   (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/trainings${q ? `?${q}` : ''}`); },
+  alerts: () => get('/trainings/alerts'),
+  stats:  () => get('/trainings/stats'),
+  get:    (id) => get(`/trainings/${id}`),
+  create: (data) => post('/trainings', data),
+  update: (id, data) => put(`/trainings/${id}`, data),
+  delete: (id) => del(`/trainings/${id}`),
+};
+
 // Modèles de contrats
 export const contractTemplatesApi = {
   list:   (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/contract-templates${q ? `?${q}` : ''}`); },

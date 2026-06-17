@@ -443,6 +443,23 @@ async function init() {
     );
   `);
 
+  // ── Formations et habilitations agents ────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS agent_trainings (
+      id           SERIAL PRIMARY KEY,
+      company_id   INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      agent_id     INTEGER NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+      name         TEXT NOT NULL,
+      category     TEXT NOT NULL DEFAULT 'formation',
+      obtained_date TEXT,
+      expiry_date  TEXT,
+      issuer       TEXT,
+      reference    TEXT,
+      notes        TEXT,
+      created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   // ── Modèles de contrats ────────────────────────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS contract_templates (
