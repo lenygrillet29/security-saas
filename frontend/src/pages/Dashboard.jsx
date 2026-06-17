@@ -6,6 +6,7 @@ import {
   Bell, FileText, ChevronRight, Loader2, Shield,
 } from 'lucide-react';
 import { agentsApi, clientsApi, sitesApi, shiftsApi, invoicesApi, shiftOffersApi } from '../api';
+import { TrendingUp } from 'lucide-react';
 
 const fmt = n => n >= 1000 ? `${(n/1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(Math.round(n));
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
@@ -164,6 +165,7 @@ export default function Dashboard() {
   const [revenue, setRevenue]       = useState([]);
   const [topClients, setTopClients] = useState([]);
   const [caStats, setCaStats]       = useState(null);
+  const [overtime, setOvertime]     = useState([]);
   const [todayShifts, setTodayShifts]     = useState([]);
   const [weekShifts, setWeekShifts]       = useState([]);
   const [pendingOffers, setPendingOffers] = useState([]);
@@ -195,7 +197,8 @@ export default function Dashboard() {
       invoicesApi.list(),
       agentsApi.carteProAlerts(),
       invoicesApi.statsCA().catch(() => null),
-    ]).then(([a, c, s, ws, ms, rev, tc, ts, wsh, offers, invoices, cpa, ca]) => {
+      shiftsApi.overtime(4).catch(() => []),
+    ]).then(([a, c, s, ws, ms, rev, tc, ts, wsh, offers, invoices, cpa, ca, ot]) => {
       setAgents(a); setClients(c); setSites(s);
       setWeekStats(ws); setMonthStats(ms);
       setRevenue(Array.isArray(rev) ? rev : []);
@@ -210,6 +213,7 @@ export default function Dashboard() {
       );
       setCarteProAlerts(Array.isArray(cpa) ? cpa : []);
       if (ca) setCaStats(ca);
+      setOvertime(Array.isArray(ot) ? ot : []);
     }).finally(() => setLoading(false));
   }, []);
 
@@ -242,7 +246,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── Alertes opérationnelles ── */}
-      {(unassignedShifts.length > 0 || pendingOffers.length > 0 || unpaidInvoices.length > 0 || carteProAlerts.length > 0) && (
+      {(unassignedShifts.length > 0 || pendingOffers.length > 0 || unpaidInvoices.length > 0 || carteProAlerts.length > 0 || overtime.length > 0) && (
         <section className="space-y-2">
           <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Alertes</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -275,6 +279,16 @@ export default function Dashboard() {
               count={unpaidInvoices.length}
               sub="dépassent la date d'échéance"
               onClick={() => navigate('/invoices')}
+            />
+            <AlertCard
+              icon={TrendingUp}
+              iconColor="text-purple-400"
+              bg="bg-purple-600/10"
+              border="border-purple-600/30"
+              title="Heures supplémentaires"
+              count={overtime.length}
+              sub={`semaine(s) dépassant 35h sur les 4 dernières semaines`}
+              onClick={() => navigate('/recap-heures')}
             />
             {carteProAlerts.length > 0 && (
               <AlertCard

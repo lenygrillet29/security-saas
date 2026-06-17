@@ -505,13 +505,49 @@ router.post('/recurring', requireWriter, async (req, res) => {
 // DELETE /api/shifts/recurrence/:recurrenceId — supprime toute la série
 router.delete('/recurrence/:recurrenceId', requireWriter, async (req, res) => {
   try {
-    const { from_date } = req.query; // optionnel : supprimer seulement à partir de cette date
+    const { from_date } = req.query;
     let query = 'DELETE FROM shifts WHERE recurrence_id = ? AND company_id = ?';
     const params = [req.params.recurrenceId, req.user.companyId];
     if (from_date) { query += ' AND date >= ?'; params.push(from_date); }
     const { changes } = await db.run(query, params);
     logAudit(req, { action: 'DELETE_RECURRING', entityType: 'shifts', details: { recurrenceId: req.params.recurrenceId, from_date, deleted: changes } });
     res.json({ success: true, deleted: changes });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/shifts/stats/overtime?weeks=4 — agents dépassant 35h/semaine
+router.get('/stats/overtime', async (req, res) => {
+  try {
+    const weeks = Math.min(parseInt(req.query.weeks) || 4, 12);
+    const since = new Date();
+    since.setDate(since.getDate() - weeks * 7);
+    const sinceStr = since.toISOString().slice(0, 10);
+
+    const rows = await db.all(`
+      SELECT
+        a.id AS agent_id,
+        a.first_name, a.last_name, a.color,
+        TO_CHAR(DATE_TRUNC('week', sh.date::date), 'YYYY-MM-DD') AS week_start,
+        ROUND(SUM(
+          COALESCE(sh.hours_day,0) + COALESCE(sh.hours_night,0) +
+          COALESCE(sh.hours_sunday,0) + COALESCE(sh.hours_sunday_night,0) +
+          COALESCE(sh.hours_holiday,0) + COALESCE(sh.hours_holiday_night,0) +
+          COALESCE(sh.hours_holiday_sunday_day,0) + COALESCE(sh.hours_holiday_sunday_night,0)
+        )::numeric, 2) AS total_hours
+      FROM shifts sh
+      JOIN agents a ON a.id = sh.agent_id
+      WHERE sh.company_id = ? AND sh.date >= ? AND sh.agent_id IS NOT NULL
+      GROUP BY a.id, a.first_name, a.last_name, a.color, week_start
+      HAVING SUM(
+        COALESCE(sh.hours_day,0) + COALESCE(sh.hours_night,0) +
+        COALESCE(sh.hours_sunday,0) + COALESCE(sh.hours_sunday_night,0) +
+        COALESCE(sh.hours_holiday,0) + COALESCE(sh.hours_holiday_night,0) +
+        COALESCE(sh.hours_holiday_sunday_day,0) + COALESCE(sh.hours_holiday_sunday_night,0)
+      ) > 35
+      ORDER BY total_hours DESC
+    `, [req.user.companyId, sinceStr]);
+
+    res.json(rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

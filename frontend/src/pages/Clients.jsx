@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Plus, Edit2, Trash2, MapPin, Mail, Phone, Search, Download, FileBarChart, Link2, Link2Off, ExternalLink } from 'lucide-react';
 import { clientsApi, sitesApi, pdfApi, reportApi, portalApi } from '../api';
 import Modal from '../components/Modal';
@@ -91,7 +91,17 @@ function ClientsInner() {
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
-  const [portalLoading, setPortalLoading] = useState(null); // clientId en cours
+  const [portalLoading, setPortalLoading] = useState(null);
+  const [reportPicker, setReportPicker] = useState(null); // clientId ouvert
+  const reportPickerRef = useRef(null);
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (reportPickerRef.current && !reportPickerRef.current.contains(e.target)) setReportPicker(null);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd');
   const monthEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd');
@@ -220,10 +230,35 @@ function ClientsInner() {
                         className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-600/10 rounded-lg transition-colors" title="Planning PDF">
                         <Download className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => reportApi.monthly(client.id, new Date().toISOString().slice(0,7))}
-                        className="p-1.5 text-slate-400 hover:text-violet-400 hover:bg-violet-600/10 rounded-lg transition-colors" title="Rapport mensuel PDF">
-                        <FileBarChart className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="relative" ref={reportPicker === client.id ? reportPickerRef : null}>
+                        <button
+                          onClick={() => setReportPicker(p => p === client.id ? null : client.id)}
+                          className="p-1.5 text-slate-400 hover:text-violet-400 hover:bg-violet-600/10 rounded-lg transition-colors"
+                          title="Rapport mensuel PDF"
+                        >
+                          <FileBarChart className="w-3.5 h-3.5" />
+                        </button>
+                        {reportPicker === client.id && (
+                          <div className="absolute right-0 top-full mt-1 w-36 bg-dark-700 border border-dark-500 rounded-xl shadow-xl z-30 overflow-hidden py-1">
+                            {Array.from({ length: 12 }, (_, i) => {
+                              const d = new Date();
+                              d.setDate(1);
+                              d.setMonth(d.getMonth() - i);
+                              const m = d.toISOString().slice(0, 7);
+                              const label = d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+                              return (
+                                <button
+                                  key={m}
+                                  onClick={() => { reportApi.monthly(client.id, m); setReportPicker(null); }}
+                                  className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-dark-600 hover:text-white capitalize transition-colors"
+                                >
+                                  {label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                       {/* Portail client */}
                       {client.portal_token ? (
                         <>

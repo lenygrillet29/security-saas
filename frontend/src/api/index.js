@@ -100,6 +100,7 @@ export const shiftsApi = {
     return get(`/shifts/stats/summary${q ? `?${q}` : ''}`);
   },
   replacements: (id) => get(`/shifts/${id}/replacements`),
+  overtime: (weeks = 4) => get(`/shifts/stats/overtime?weeks=${weeks}`),
   copyDay: (from_date, to_date, copy_agents) => post('/shifts/copy-day', { from_date, to_date, copy_agents }),
   createRecurring: (data) => post('/shifts/recurring', data),
   deleteRecurrence: (recurrenceId, from_date) => {
