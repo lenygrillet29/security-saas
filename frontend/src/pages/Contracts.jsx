@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { FileText, Plus, Send, Trash2, CheckCircle, Edit2, Users, Building2 } from 'lucide-react';
-import { contractsApi, agentsApi, clientContractsApi, clientsApi } from '../api';
+import { FileText, Plus, Send, Trash2, CheckCircle, Edit2, Users, Building2, BookOpen, Copy } from 'lucide-react';
+import { contractsApi, agentsApi, clientContractsApi, clientsApi, contractTemplatesApi } from '../api';
 import Modal from '../components/Modal';
 import Confirm from '../components/Confirm';
 import { ToastProvider, useToast } from '../components/Toast';
@@ -120,6 +120,26 @@ const BILLING_OPTIONS = [
   { value: 'hourly',   label: 'À l\'heure' },
 ];
 
+const TEMPLATE_VARS = [
+  { key: '{{client_name}}',    label: 'Nom client' },
+  { key: '{{start_date}}',     label: 'Date début' },
+  { key: '{{end_date}}',       label: 'Date fin' },
+  { key: '{{amount}}',         label: 'Montant HT' },
+  { key: '{{billing_type}}',   label: 'Facturation' },
+  { key: '{{company_name}}',   label: 'Votre société' },
+];
+
+function applyTemplate(body, { clientName = '', startDate = '', endDate = '', amount = '', billingType = '', companyName = '' } = {}) {
+  const BILLING_FR = { monthly: 'mensuel', yearly: 'annuel', one_time: 'forfait unique', hourly: 'à l\'heure' };
+  return body
+    .replace(/{{client_name}}/g, clientName)
+    .replace(/{{start_date}}/g, startDate)
+    .replace(/{{end_date}}/g, endDate)
+    .replace(/{{amount}}/g, amount ? `${amount} €` : '')
+    .replace(/{{billing_type}}/g, BILLING_FR[billingType] || billingType)
+    .replace(/{{company_name}}/g, companyName);
+}
+
 function ClientContractForm({ contract, clients, onSave, onClose }) {
   const toast = useToast();
   const [form, setForm] = useState({
@@ -133,6 +153,25 @@ function ClientContractForm({ contract, clients, onSave, onClose }) {
     notes:        contract?.notes        || '',
   });
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  const [templates, setTemplates] = useState([]);
+  const [tplOpen, setTplOpen]     = useState(false);
+
+  useEffect(() => { contractTemplatesApi.list({ category: 'client' }).then(setTemplates).catch(() => {}); }, []);
+
+  function useTemplate(tpl) {
+    const client = clients.find(c => String(c.id) === String(form.client_id));
+    const desc = applyTemplate(tpl.body, {
+      clientName:   client?.name || '',
+      startDate:    form.start_date,
+      endDate:      form.end_date,
+      amount:       form.amount,
+      billingType:  form.billing_type,
+      companyName:  '',
+    });
+    setForm(f => ({ ...f, description: desc }));
+    setTplOpen(false);
+    toast('Modèle appliqué', 'success');
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -188,7 +227,28 @@ function ClientContractForm({ contract, clients, onSave, onClose }) {
       </div>
 
       <div>
-        <label className="label">Description des prestations</label>
+        <div className="flex items-center justify-between mb-1">
+          <label className="label mb-0">Description des prestations</label>
+          {templates.length > 0 && (
+            <div className="relative">
+              <button type="button" onClick={() => setTplOpen(o => !o)}
+                className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition-colors">
+                <BookOpen className="w-3.5 h-3.5" /> Utiliser un modèle
+              </button>
+              {tplOpen && (
+                <div className="absolute right-0 top-full mt-1 w-56 bg-dark-700 border border-dark-500 rounded-xl shadow-xl z-30 overflow-hidden">
+                  {templates.map(t => (
+                    <button key={t.id} type="button" onClick={() => useTemplate(t)}
+                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-200 hover:bg-dark-600 transition-colors text-left">
+                      <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span className="truncate">{t.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
         <textarea className="input" rows={4} value={form.description} onChange={e => set('description', e.target.value)} placeholder="Détail des services, conditions particulières..." />
       </div>
 
@@ -326,6 +386,137 @@ function ClientContractsSection() {
 }
 
 // ─── Inner principal avec onglets ─────────────────────────────────────────────
+// ─── Section modèles de contrats ──────────────────────────────────────────────
+function TemplatesSection() {
+  const toast = useToast();
+  const [templates, setTemplates] = useState([]);
+  const [editing, setEditing]     = useState(null);
+  const [form, setForm]           = useState(null);
+
+  const load = () => contractTemplatesApi.list().then(setTemplates).catch(e => toast(e.message, 'error'));
+  useEffect(() => { load(); }, []);
+
+  const emptyForm = () => ({ name: '', category: 'client', body: '', notes: '' });
+
+  async function save() {
+    try {
+      if (editing) await contractTemplatesApi.update(editing.id, form);
+      else await contractTemplatesApi.create(form);
+      toast(editing ? 'Modèle modifié' : 'Modèle créé', 'success');
+      setForm(null); setEditing(null); load();
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  async function del(id) {
+    if (!confirm('Supprimer ce modèle ?')) return;
+    try { await contractTemplatesApi.delete(id); load(); }
+    catch (e) { toast(e.message, 'error'); }
+  }
+
+  function openEdit(t) { setEditing(t); setForm({ name: t.name, category: t.category, body: t.body, notes: t.notes || '' }); }
+
+  const vars = TEMPLATE_VARS;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-slate-400">Créez des modèles réutilisables avec des variables dynamiques.</p>
+        <button className="btn-primary flex items-center gap-2" onClick={() => { setEditing(null); setForm(emptyForm()); }}>
+          <Plus className="w-4 h-4" /> Nouveau modèle
+        </button>
+      </div>
+
+      {/* Variables disponibles */}
+      <div className="card p-4">
+        <p className="text-xs text-slate-500 mb-2 font-medium uppercase tracking-wide">Variables disponibles</p>
+        <div className="flex flex-wrap gap-2">
+          {vars.map(v => (
+            <span key={v.key} className="flex items-center gap-1.5 text-xs bg-dark-700 border border-dark-500 rounded-lg px-2.5 py-1">
+              <code className="text-blue-400">{v.key}</code>
+              <span className="text-slate-500">{v.label}</span>
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {templates.length === 0 && !form ? (
+        <div className="card py-16 text-center">
+          <BookOpen className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+          <p className="text-slate-400">Aucun modèle — créez-en un pour l'utiliser lors de la rédaction de contrats clients.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {templates.map(t => (
+            <div key={t.id} className="card p-4">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center shrink-0">
+                  <FileText className="w-4 h-4 text-violet-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-white font-medium text-sm">{t.name}</span>
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-dark-700 text-slate-400">{t.category === 'client' ? 'Client' : 'Agent'}</span>
+                  </div>
+                  {t.body && (
+                    <p className="text-xs text-slate-500 mt-1 line-clamp-2 whitespace-pre-wrap">{t.body.slice(0, 120)}{t.body.length > 120 ? '…' : ''}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => openEdit(t)} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-dark-600 transition-colors">
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button onClick={() => del(t.id)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Formulaire inline */}
+      {form && (
+        <div className="card p-5 border-blue-600/30">
+          <h3 className="text-white font-semibold mb-4">{editing ? 'Modifier le modèle' : 'Nouveau modèle'}</h3>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">Nom du modèle *</label>
+                <input className="input" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Ex: Contrat gardiennage standard" />
+              </div>
+              <div>
+                <label className="label">Catégorie</label>
+                <select className="input" value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
+                  <option value="client">Contrat client</option>
+                  <option value="agent">Contrat agent</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="label">Corps du contrat</label>
+              <textarea className="input font-mono text-xs" rows={10}
+                value={form.body}
+                onChange={e => setForm(f => ({ ...f, body: e.target.value }))}
+                placeholder={`Entre le prestataire et {{client_name}},\nPériode du {{start_date}} au {{end_date}}.\nMontant : {{amount}} ({{billing_type}}).\n\nPrestations :\n...`}
+              />
+              <p className="text-xs text-slate-600 mt-1">Utilisez les variables ci-dessus — elles seront remplacées automatiquement lors de l'application.</p>
+            </div>
+            <div>
+              <label className="label">Notes internes</label>
+              <textarea className="input" rows={2} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+            </div>
+          </div>
+          <div className="flex gap-3 mt-4 justify-end">
+            <button onClick={() => { setForm(null); setEditing(null); }} className="btn-secondary">Annuler</button>
+            <button onClick={save} className="btn-primary">{editing ? 'Enregistrer' : 'Créer le modèle'}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ContractsInner() {
   const toast = useToast();
   const [tab, setTab] = useState('clients'); // 'agents' | 'clients'
@@ -389,9 +580,16 @@ function ContractsInner() {
         >
           <Users className="w-4 h-4" /> Agents
         </button>
+        <button
+          onClick={() => setTab('templates')}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'templates' ? 'border-blue-500 text-white' : 'border-transparent text-slate-400 hover:text-white'}`}
+        >
+          <BookOpen className="w-4 h-4" /> Modèles
+        </button>
       </div>
 
-      {tab === 'clients' && <ClientContractsSection />}
+      {tab === 'clients'   && <ClientContractsSection />}
+      {tab === 'templates' && <TemplatesSection />}
 
       {tab === 'agents' && <>
       <div className="flex justify-end">

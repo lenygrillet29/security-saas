@@ -443,6 +443,20 @@ async function init() {
     );
   `);
 
+  // ── Modèles de contrats ────────────────────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS contract_templates (
+      id         SERIAL PRIMARY KEY,
+      company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      name       TEXT NOT NULL,
+      category   TEXT NOT NULL DEFAULT 'client',
+      body       TEXT NOT NULL DEFAULT '',
+      notes      TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   // ── Equipements / dotations agents ────────────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS equipments (

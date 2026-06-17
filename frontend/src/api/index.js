@@ -263,6 +263,15 @@ export const expensesApi = {
   reject:  (id, reason) => post(`/expenses/${id}/reject`, { reason }),
 };
 
+// Modèles de contrats
+export const contractTemplatesApi = {
+  list:   (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/contract-templates${q ? `?${q}` : ''}`); },
+  get:    (id) => get(`/contract-templates/${id}`),
+  create: (data) => post('/contract-templates', data),
+  update: (id, data) => put(`/contract-templates/${id}`, data),
+  delete: (id) => del(`/contract-templates/${id}`),
+};
+
 // Equipements
 export const equipmentsApi = {
   list:   (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/equipments${q ? `?${q}` : ''}`); },
