@@ -115,8 +115,9 @@ function AgentForm({ agent, onSave, onClose }) {
     hourly_rate:     agent?.hourly_rate     || '',
     entry_date:      agent?.entry_date      || '',
     exit_date:       agent?.exit_date       || '',
-    carte_vitale:    agent?.carte_vitale    || '',
-    carte_pro:       agent?.carte_pro       || '',
+    carte_vitale:      agent?.carte_vitale      || '',
+    carte_pro:         agent?.carte_pro         || '',
+    carte_pro_expiry:  agent?.carte_pro_expiry  || '',
     color:           agent?.color           || '#3B82F6',
     notes:           agent?.notes           || '',
     active:          agent?.active !== undefined ? agent.active : 1,
@@ -239,6 +240,12 @@ function AgentForm({ agent, onSave, onClose }) {
               <Shield className="w-3.5 h-3.5 text-rose-400" /> N° Carte professionnelle CNAPS
             </label>
             <input className="input" value={form.carte_pro} onChange={e => set('carte_pro', e.target.value)} placeholder="APS-XXXXXXXXX-XXXX-X" />
+          </div>
+          <div>
+            <label className="label flex items-center gap-1.5">
+              <Shield className="w-3.5 h-3.5 text-rose-400" /> Date d'expiration carte pro
+            </label>
+            <input className="input" type="date" value={form.carte_pro_expiry} onChange={e => set('carte_pro_expiry', e.target.value)} />
           </div>
         </div>
         <p className="text-xs text-slate-600">Ces données sont confidentielles et stockées de façon sécurisée.</p>
@@ -458,7 +465,21 @@ function AgentsInner() {
                     <td className="py-3 px-3">
                       <span className="badge bg-dark-600 text-slate-300">{agent.contract_type}</span>
                       {agent.hourly_rate > 0 && <div className="text-xs text-slate-500 mt-0.5">{agent.hourly_rate}€/h</div>}
-                      {agent.carte_pro && <div className="text-xs text-rose-400/70 mt-0.5 flex items-center gap-1"><Shield className="w-2.5 h-2.5" />{agent.carte_pro}</div>}
+                      {agent.carte_pro && (() => {
+                        const today = new Date().toISOString().slice(0,10);
+                        const exp = agent.carte_pro_expiry;
+                        const daysLeft = exp ? Math.ceil((new Date(exp) - new Date(today)) / 86400000) : null;
+                        const expired = exp && exp < today;
+                        const soon = !expired && daysLeft !== null && daysLeft <= 30;
+                        return (
+                          <div className={`text-xs mt-0.5 flex items-center gap-1 ${expired ? 'text-red-400 font-semibold' : soon ? 'text-amber-400' : 'text-rose-400/70'}`}>
+                            <Shield className="w-2.5 h-2.5" />
+                            {agent.carte_pro}
+                            {expired && <span className="ml-1 px-1 py-0.5 bg-red-500/20 rounded text-red-400 text-[10px]">EXPIRÉE</span>}
+                            {soon && <span className="ml-1 px-1 py-0.5 bg-amber-500/20 rounded text-amber-400 text-[10px]">J-{daysLeft}</span>}
+                          </div>
+                        );
+                      })()}
                       {agent.entry_date && <div className="text-xs text-slate-600 mt-0.5">Entrée : {new Date(agent.entry_date).toLocaleDateString('fr-FR')}</div>}
                     </td>
                     <td className="py-3 px-3 text-right">

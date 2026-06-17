@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Users, Building2, MapPin, Clock, Euro, BarChart3, Star,
   AlertTriangle, CheckCircle, LogIn, LogOut, Calendar,
-  Bell, FileText, ChevronRight, Loader2,
+  Bell, FileText, ChevronRight, Loader2, Shield,
 } from 'lucide-react';
 import { agentsApi, clientsApi, sitesApi, shiftsApi, invoicesApi, shiftOffersApi } from '../api';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
@@ -151,6 +151,7 @@ export default function Dashboard() {
   const [weekShifts, setWeekShifts]       = useState([]);
   const [pendingOffers, setPendingOffers] = useState([]);
   const [unpaidInvoices, setUnpaidInvoices] = useState([]);
+  const [carteProAlerts, setCarteProAlerts] = useState([]);
 
   const today      = new Date();
   const todayStr   = format(today, 'yyyy-MM-dd');
@@ -175,7 +176,8 @@ export default function Dashboard() {
       shiftsApi.list({ start_date: weekStart, end_date: weekEnd }),
       shiftOffersApi.list(),
       invoicesApi.list(),
-    ]).then(([a, c, s, ws, ms, rev, tc, ts, wsh, offers, invoices]) => {
+      agentsApi.carteProAlerts(),
+    ]).then(([a, c, s, ws, ms, rev, tc, ts, wsh, offers, invoices, cpa]) => {
       setAgents(a); setClients(c); setSites(s);
       setWeekStats(ws); setMonthStats(ms);
       setRevenue(Array.isArray(rev) ? rev : []);
@@ -188,6 +190,7 @@ export default function Dashboard() {
         ? invoices.filter(i => (i.status === 'sent' || i.status === 'overdue') && i.due_date && new Date(i.due_date) < now)
         : []
       );
+      setCarteProAlerts(Array.isArray(cpa) ? cpa : []);
     }).finally(() => setLoading(false));
   }, []);
 
@@ -220,7 +223,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── Alertes opérationnelles ── */}
-      {(unassignedShifts.length > 0 || pendingOffers.length > 0 || unpaidInvoices.length > 0) && (
+      {(unassignedShifts.length > 0 || pendingOffers.length > 0 || unpaidInvoices.length > 0 || carteProAlerts.length > 0) && (
         <section className="space-y-2">
           <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Alertes</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -254,6 +257,18 @@ export default function Dashboard() {
               sub="dépassent la date d'échéance"
               onClick={() => navigate('/invoices')}
             />
+            {carteProAlerts.length > 0 && (
+              <AlertCard
+                icon={Shield}
+                iconColor={carteProAlerts.some(a => a.expired) ? 'text-red-400' : 'text-amber-400'}
+                bg={carteProAlerts.some(a => a.expired) ? 'bg-red-600/10' : 'bg-amber-600/10'}
+                border={carteProAlerts.some(a => a.expired) ? 'border-red-600/30' : 'border-amber-600/30'}
+                title="Cartes pro à renouveler"
+                count={carteProAlerts.length}
+                sub={carteProAlerts.some(a => a.expired) ? 'dont expirée(s) — action urgente' : 'expirent dans moins de 30 jours'}
+                onClick={() => navigate('/agents')}
+              />
+            )}
           </div>
         </section>
       )}

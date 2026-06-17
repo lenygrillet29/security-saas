@@ -4,6 +4,7 @@ const { sendSystemEmail } = require('../utils/systemEmail');
 const { sendSMS } = require('../utils/smsService');
 const templates = require('../utils/emailTemplates');
 const { sendInvoiceReminders } = require('./invoiceReminders');
+const { sendCarteProAlerts }   = require('./carteProAlerts');
 
 function frDate(d) {
   return new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -97,7 +98,10 @@ function startScheduler() {
   // Relances factures impayées — tous les jours à 9h30 (Paris)
   cron.schedule('30 9 * * *', sendInvoiceReminders, { timezone: 'Europe/Paris' });
 
-  console.log('[Scheduler] Démarré — rappels essai (9h00) · SMS shifts (18h00) · relances factures (9h30)');
+  // Alertes carte pro — tous les jours à 8h00 (Paris)
+  cron.schedule('0 8 * * *', sendCarteProAlerts, { timezone: 'Europe/Paris' });
+
+  console.log('[Scheduler] Démarré — rappels essai (9h00) · SMS shifts (18h00) · relances factures (9h30) · alertes carte pro (8h00)');
 }
 
 module.exports = { startScheduler, sendTrialReminders, sendShiftSMSReminders };
