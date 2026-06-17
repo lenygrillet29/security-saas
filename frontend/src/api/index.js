@@ -165,6 +165,10 @@ export const pdfApi = {
     const token = localStorage.getItem('auth_token');
     window.open(`${BASE}/pdf/badge/${id}?token=${token}`, '_blank');
   },
+  agentRecap: (agentId, month) => {
+    const token = localStorage.getItem('auth_token');
+    window.open(`${BASE}/pdf/recap/agent/${agentId}?month=${month}&token=${token}`, '_blank');
+  },
 };
 
 // Email

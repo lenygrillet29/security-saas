@@ -229,4 +229,164 @@ router.get('/report/monthly/:clientId', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── Récap mensuel paie agent ─────────────────────────────────────────────────
+// GET /api/pdf/recap/agent/:agentId?month=2026-06
+router.get('/recap/agent/:agentId', async (req, res) => {
+  try {
+    const { month } = req.query;
+    const yearMonth = month || new Date().toISOString().slice(0, 7);
+    const [year, mon] = yearMonth.split('-');
+    const startDate = `${yearMonth}-01`;
+    const endDate   = new Date(year, mon, 0).toISOString().split('T')[0];
+
+    const agent = await db.get('SELECT * FROM agents WHERE id = ? AND company_id = ?', [req.params.agentId, req.user.companyId]);
+    if (!agent) return res.status(404).json({ error: 'Agent non trouvé' });
+
+    const shifts = await db.all(`
+      SELECT sh.*,
+             s.name AS site_name, s.city AS site_city,
+             cl.name AS client_name
+      FROM shifts sh
+      JOIN sites   s  ON sh.site_id  = s.id
+      JOIN clients cl ON cl.id = s.client_id
+      WHERE sh.agent_id = ? AND sh.company_id = ?
+        AND sh.date >= ? AND sh.date <= ?
+      ORDER BY sh.date, sh.start_time
+    `, [agent.id, req.user.companyId, startDate, endDate]);
+
+    const settings = await getSettings(req.user.companyId);
+    const PDFDocument = require('pdfkit');
+    const doc = new PDFDocument({ margin: 40, size: 'A4', bufferPages: true, info: { Creator: 'SecuroPlan' } });
+
+    const monthLabel = new Date(startDate).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+    const W = doc.page.width;
+
+    // ── En-tête ──
+    doc.rect(0, 0, W, 70).fill('#1A1D2E');
+    doc.fillColor('#3B82F6').fontSize(18).font('Helvetica-Bold')
+       .text(settings.company_name || 'SecuroPlan', 40, 18);
+    doc.fillColor('#F1F5F9').fontSize(13).font('Helvetica-Bold')
+       .text('RÉCAP MENSUEL PAIE', 0, 18, { align: 'right', width: W - 40 });
+    doc.fillColor('#94A3B8').fontSize(9).font('Helvetica')
+       .text(monthLabel.toUpperCase(), 0, 38, { align: 'right', width: W - 40 });
+
+    let y = 90;
+
+    // ── Infos agent ──
+    doc.rect(40, y, W - 80, 54).fill('#1E2535');
+    doc.fillColor('#94A3B8').fontSize(8).text('AGENT', 56, y + 8);
+    doc.fillColor('#F1F5F9').fontSize(13).font('Helvetica-Bold')
+       .text(`${agent.first_name} ${agent.last_name}`, 56, y + 18);
+    const agentInfoParts = [];
+    if (agent.employee_number) agentInfoParts.push(`Matricule : ${agent.employee_number}`);
+    if (agent.contract_type)   agentInfoParts.push(agent.contract_type);
+    if (agent.carte_pro)       agentInfoParts.push(`Carte pro : ${agent.carte_pro}`);
+    if (agentInfoParts.length) {
+      doc.fillColor('#94A3B8').fontSize(8).font('Helvetica')
+         .text(agentInfoParts.join('  ·  '), 56, y + 36);
+    }
+    y += 68;
+
+    // ── Totaux ──
+    const tot = {
+      day:          shifts.reduce((s, sh) => s + (parseFloat(sh.hours_day)                  || 0), 0),
+      night:        shifts.reduce((s, sh) => s + (parseFloat(sh.hours_night)                || 0), 0),
+      sunday:       shifts.reduce((s, sh) => s + (parseFloat(sh.hours_sunday)               || 0), 0),
+      sundayNight:  shifts.reduce((s, sh) => s + (parseFloat(sh.hours_sunday_night)         || 0), 0),
+      holiday:      shifts.reduce((s, sh) => s + (parseFloat(sh.hours_holiday)              || 0), 0),
+      holidayNight: shifts.reduce((s, sh) => s + (parseFloat(sh.hours_holiday_night)        || 0), 0),
+      hsdDay:       shifts.reduce((s, sh) => s + (parseFloat(sh.hours_holiday_sunday_day)   || 0), 0),
+      hsdNight:     shifts.reduce((s, sh) => s + (parseFloat(sh.hours_holiday_sunday_night) || 0), 0),
+    };
+    tot.total = Object.values(tot).reduce((a, b) => a + b, 0);
+
+    const hStr = h => h > 0 ? `${Math.floor(h)}h${Math.round((h%1)*60).toString().padStart(2,'0')}` : '—';
+
+    const boxes = [
+      { label: 'Total heures', value: hStr(tot.total), color: '#3B82F6' },
+      { label: 'Heures jour', value: hStr(tot.day), color: '#F59E0B' },
+      { label: 'Heures nuit', value: hStr(tot.night), color: '#8B5CF6' },
+      { label: 'Dimanche', value: hStr(tot.sunday + tot.sundayNight), color: '#06B6D4' },
+      { label: 'Jours fériés', value: hStr(tot.holiday + tot.holidayNight + tot.hsdDay + tot.hsdNight), color: '#EF4444' },
+      { label: 'Vacations', value: `${shifts.length}`, color: '#10B981' },
+    ];
+    const bw = (W - 80) / 3;
+    boxes.forEach((b, i) => {
+      const bx = 40 + (i % 3) * bw;
+      const by = y + Math.floor(i / 3) * 48;
+      doc.rect(bx + 2, by, bw - 4, 44).fill('#1E2535');
+      doc.fillColor(b.color).fontSize(15).font('Helvetica-Bold')
+         .text(b.value, bx + 8, by + 6, { width: bw - 16 });
+      doc.fillColor('#64748B').fontSize(7).font('Helvetica')
+         .text(b.label.toUpperCase(), bx + 8, by + 28, { width: bw - 16 });
+    });
+    y += 100;
+
+    // ── Tableau des vacations ──
+    const COL = { date: 40, client: 95, site: 200, hours: 310, type: 390, total: 490 };
+    doc.rect(40, y, W - 80, 16).fill('#2D3555');
+    doc.fillColor('#94A3B8').fontSize(7).font('Helvetica')
+       .text('DATE',    COL.date,   y + 5)
+       .text('CLIENT',  COL.client, y + 5)
+       .text('SITE',    COL.site,   y + 5)
+       .text('HORAIRES',COL.hours,  y + 5)
+       .text('TYPE',    COL.type,   y + 5)
+       .text('TOTAL',   COL.total,  y + 5, { width: 60, align: 'right' });
+    y += 20;
+
+    for (const sh of shifts) {
+      if (y > doc.page.height - 100) { doc.addPage(); y = 40; }
+      const totalH = (parseFloat(sh.hours_day)||0) + (parseFloat(sh.hours_night)||0) +
+                     (parseFloat(sh.hours_sunday)||0) + (parseFloat(sh.hours_sunday_night)||0) +
+                     (parseFloat(sh.hours_holiday)||0) + (parseFloat(sh.hours_holiday_night)||0) +
+                     (parseFloat(sh.hours_holiday_sunday_day)||0) + (parseFloat(sh.hours_holiday_sunday_night)||0);
+
+      let typeLabel = 'Jour';
+      if (sh.hours_night > 0)               typeLabel = 'Nuit';
+      if (sh.hours_sunday > 0)              typeLabel = 'Dim.';
+      if (sh.hours_holiday > 0)             typeLabel = 'Férié';
+
+      doc.fillColor('#F1F5F9').fontSize(8.5).font('Helvetica')
+         .text(new Date(sh.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }), COL.date, y)
+         .text(sh.client_name, COL.client, y, { width: 100, ellipsis: true })
+         .text(sh.site_name,   COL.site,   y, { width: 105, ellipsis: true })
+         .text(`${sh.start_time.slice(0,5)}–${sh.end_time.slice(0,5)}`, COL.hours, y)
+         .text(typeLabel,      COL.type,   y)
+         .text(hStr(totalH),   COL.total,  y, { width: 60, align: 'right' });
+      y += 14;
+      doc.rect(40, y, W - 80, 0.5).fill('#1E2535');
+      y += 3;
+    }
+
+    // ── Zone signature ──
+    y += 20;
+    if (y > doc.page.height - 120) { doc.addPage(); y = 40; }
+    doc.rect(40, y, W - 80, 80).fill('#1E2535');
+    doc.fillColor('#64748B').fontSize(8).font('Helvetica')
+       .text('Je soussigné(e) certifie exact le récapitulatif des heures ci-dessus.', 56, y + 10);
+    doc.fillColor('#94A3B8').fontSize(8)
+       .text('Date et signature de l\'agent :', 56, y + 28)
+       .text('Signature de l\'employeur :', W / 2 + 10, y + 28);
+    doc.rect(56, y + 40, (W - 80) / 2 - 20, 28).stroke('#2D3555');
+    doc.rect(W / 2 + 10, y + 40, (W - 80) / 2 - 20, 28).stroke('#2D3555');
+
+    // ── Pied de page ──
+    const range = doc.bufferedPageRange();
+    const legalParts = [];
+    if (settings.company_name)  legalParts.push(settings.company_name);
+    if (settings.company_siret) legalParts.push(`SIRET : ${settings.company_siret}`);
+    const footerText = legalParts.join('  ·  ') || `SecuroPlan — Généré le ${new Date().toLocaleDateString('fr-FR')}`;
+    for (let i = 0; i < range.count; i++) {
+      doc.switchToPage(range.start + i);
+      const ph = doc.page.height;
+      doc.rect(0, ph - 28, W, 28).fill('#1A1D2E');
+      doc.fillColor('#475569').fontSize(7).font('Helvetica')
+         .text(footerText, 20, ph - 17, { width: W - 40, align: 'center', lineBreak: false });
+    }
+
+    const mSlug = monthLabel.replace(' ', '_');
+    streamPdf(res, doc, `recap_paie_${agent.last_name}_${mSlug}.pdf`);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

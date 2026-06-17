@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Clock, Download, Sun, Moon, CalendarDays, Star, ChevronLeft, ChevronRight, Users, ChevronDown, FileSpreadsheet } from 'lucide-react';
-import { exportApi } from '../api';
+import { Clock, Download, Sun, Moon, CalendarDays, Star, ChevronLeft, ChevronRight, Users, ChevronDown, FileSpreadsheet, FileText } from 'lucide-react';
+import { exportApi, pdfApi } from '../api';
 import AgentQuickView from '../components/AgentQuickView';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
@@ -237,17 +237,19 @@ export default function RecapHeures() {
                     <span className="flex items-center justify-end gap-1"><Star className="w-3 h-3 text-orange-300" />F.D.N</span>
                   </th>
                   <th className="text-right py-3 px-3 font-medium text-white">Total</th>
+                  <th className="py-3 px-2"></th>
                 </tr>
                 <tr className="text-xs text-slate-600 border-b border-dark-700">
                   <td colSpan={2}></td>
-                  <td className="text-right px-2 pb-1">06h–21h</td>
+                  <td className="text-right px-2 pb-1 text-xs text-slate-600">06h–21h</td>
                   <td className="text-right px-2 pb-1">21h–06h</td>
                   <td className="text-right px-2 pb-1">Dim.06–21</td>
                   <td className="text-right px-2 pb-1">Dim.21–06</td>
                   <td className="text-right px-2 pb-1">Fér.06–21</td>
                   <td className="text-right px-2 pb-1">Fér.21–06</td>
                   <td className="text-right px-2 pb-1">F+D.06–21</td>
-                  <td className="text-right px-2 pb-1">F+D.21–06</td>
+                  <td className="text-right px-2 pb-1 text-xs text-slate-600">F+D.21–06</td>
+                  <td></td>
                   <td></td>
                 </tr>
               </thead>
@@ -272,6 +274,15 @@ export default function RecapHeures() {
                     <td className="py-2.5 px-2 text-right text-sm text-orange-300/80">{fmtH(parseFloat(a.total_holiday_sunday_day))}</td>
                     <td className="py-2.5 px-2 text-right text-sm text-orange-200/70">{fmtH(parseFloat(a.total_holiday_sunday_night))}</td>
                     <td className="py-2.5 px-3 text-right font-semibold text-white">{fmtHStr(parseFloat(a.total_hours))}</td>
+                    <td className="py-2.5 px-2">
+                      <button
+                        onClick={() => pdfApi.agentRecap(a.agent_id, `${year}-${String(month).padStart(2,'0')}`)}
+                        className="p-1.5 rounded-lg hover:bg-blue-500/20 text-slate-500 hover:text-blue-400 transition-colors"
+                        title="Récap paie PDF"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
                   </tr>
                 ))}
 
@@ -288,6 +299,7 @@ export default function RecapHeures() {
                   <td className="py-2.5 px-2 text-right text-sm text-orange-300">{fmtHStr(totals.total_holiday_sunday_day)}</td>
                   <td className="py-2.5 px-2 text-right text-sm text-orange-200">{fmtHStr(totals.total_holiday_sunday_night)}</td>
                   <td className="py-2.5 px-3 text-right text-white">{fmtHStr(totals.total_hours)}</td>
+                  <td></td>
                 </tr>
               </tbody>
             </table>
