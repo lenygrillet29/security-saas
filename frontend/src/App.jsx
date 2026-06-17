@@ -19,6 +19,7 @@ import SignContract from './pages/SignContract';
 import SignClientContract from './pages/SignClientContract';
 import Invoices from './pages/Invoices';
 import Expenses from './pages/Expenses';
+import CongesPayes from './pages/CongesPayes';
 import AuditLog from './pages/AuditLog';
 import Simulation from './pages/Simulation';
 import RecapHeures from './pages/RecapHeures';
@@ -96,7 +97,8 @@ export default function App() {
               <Route path="quotes" element={<Quotes />} />
               <Route path="contracts" element={<Contracts />} />
               <Route path="invoices"  element={<Invoices />} />
-              <Route path="expenses"  element={<Expenses />} />
+              <Route path="expenses"   element={<Expenses />} />
+              <Route path="conges"    element={<CongesPayes />} />
               <Route path="audit"     element={<AuditLog />} />
               <Route path="simulation" element={<Simulation />} />
               <Route path="recap-heures" element={<RecapHeures />} />

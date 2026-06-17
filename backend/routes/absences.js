@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../db/database');
 const { requireWriter } = require('../middleware/auth');
+const { getBalance } = require('./cp');
 
 const ABSENCES_QUERY = `
   SELECT ab.*, a.first_name, a.last_name, a.color as agent_color
@@ -70,6 +71,20 @@ router.put('/:id/approve', requireWriter, async (req, res) => {
     if (!absence) return res.status(404).json({ error: 'Absence non trouvée' });
 
     await db.run('UPDATE absences SET status = ? WHERE id = ?', ['approved', req.params.id]);
+
+    // Déduire les jours CP si c'est un congé payé
+    if (absence.type === 'conge') {
+      try {
+        const start = new Date(absence.start_date);
+        const end   = new Date(absence.end_date);
+        const days  = Math.round((end - start) / 86400000) + 1;
+        await db.insert(
+          `INSERT INTO cp_transactions (company_id, agent_id, absence_id, date, type, days, notes)
+           VALUES (?, ?, ?, ?, 'utilisation', ?, ?)`,
+          [req.user.companyId, absence.agent_id, absence.id, absence.start_date, -days, `Congé ${absence.start_date} → ${absence.end_date}`]
+        );
+      } catch {}
+    }
 
     // Push notification à l'agent
     try {

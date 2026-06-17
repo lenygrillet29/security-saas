@@ -238,6 +238,15 @@ export const invoicesApi = {
   statsCA: () => get('/invoices/stats/ca'),
 };
 
+// Congés payés
+export const cpApi = {
+  balances:            () => get('/cp/balances'),
+  agent:               (agentId) => get(`/cp/agent/${agentId}`),
+  addTransaction:      (data) => post('/cp', data),
+  acquisitionMensuelle:(month, days) => post('/cp/acquisition-mensuelle', { month, days_per_agent: days }),
+  deleteTransaction:   (id) => del(`/cp/${id}`),
+};
+
 // Notes de frais
 export const expensesApi = {
   list:    (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/expenses${q ? `?${q}` : ''}`); },

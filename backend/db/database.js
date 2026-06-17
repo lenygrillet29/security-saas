@@ -395,6 +395,21 @@ async function init() {
     );
   `);
 
+  // ── Congés payés — transactions par agent ────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS cp_transactions (
+      id          SERIAL PRIMARY KEY,
+      company_id  INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      agent_id    INTEGER NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+      absence_id  INTEGER REFERENCES absences(id) ON DELETE SET NULL,
+      date        TEXT NOT NULL,
+      type        TEXT NOT NULL DEFAULT 'acquisition',
+      days        REAL NOT NULL,
+      notes       TEXT,
+      created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   // ── Notes de frais agents ────────────────────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS expense_reports (
