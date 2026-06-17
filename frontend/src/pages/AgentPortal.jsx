@@ -4,7 +4,7 @@ import {
   Shield, MapPin, Clock, LogIn, LogOut, CheckCircle,
   AlertTriangle, Loader2, Calendar, Info, X,
   Bell, BellOff, User, Phone, Mail, FileText,
-  CalendarDays, TrendingUp, ChevronDown, ChevronUp,
+  CalendarDays, TrendingUp, ChevronDown, ChevronUp, Plus,
 } from 'lucide-react';
 import { format, parseISO, isToday, isTomorrow } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -360,6 +360,180 @@ function TabDemandes({ offers, token, onReload }) {
   );
 }
 
+// ── Onglet Congés ─────────────────────────────────────────────────────────────
+const ABSENCE_TYPES = [
+  { value: 'conge',     label: 'Congé payé' },
+  { value: 'maladie',   label: 'Arrêt maladie' },
+  { value: 'formation', label: 'Formation' },
+  { value: 'autre',     label: 'Autre' },
+];
+
+const STATUS_STYLES = {
+  pending:  { label: 'En attente', cls: 'bg-amber-500/20 text-amber-300' },
+  approved: { label: 'Approuvé',   cls: 'bg-emerald-500/20 text-emerald-300' },
+  rejected: { label: 'Refusé',     cls: 'bg-red-500/20 text-red-300' },
+};
+
+function TabConges({ token }) {
+  const [absences, setAbsences] = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving]     = useState(false);
+  const [err, setErr]           = useState('');
+  const [done, setDone]         = useState(false);
+  const today = new Date().toISOString().split('T')[0];
+  const [form, setForm] = useState({ type: 'conge', start_date: today, end_date: today, notes: '' });
+
+  async function load() {
+    try {
+      const r = await fetch(`${API_BASE}/agent-portal/${token}/absences`);
+      const j = await r.json();
+      setAbsences(Array.isArray(j) ? j : []);
+    } catch {}
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (form.end_date < form.start_date) { setErr('La date de fin doit être après le début'); return; }
+    setSaving(true); setErr('');
+    try {
+      const r = await fetch(`${API_BASE}/agent-portal/${token}/absences`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'Erreur');
+      setDone(true);
+      setShowForm(false);
+      await load();
+      setTimeout(() => setDone(false), 3000);
+    } catch (e) { setErr(e.message); }
+    finally { setSaving(false); }
+  }
+
+  function daysBetween(a, b) {
+    return Math.ceil((new Date(b) - new Date(a)) / 86400000) + 1;
+  }
+
+  return (
+    <div className="space-y-4">
+      {done && (
+        <div className="rounded-2xl bg-emerald-900/40 border border-emerald-500/30 p-4 text-center text-emerald-300 font-semibold text-sm">
+          ✅ Demande envoyée — en attente de validation
+        </div>
+      )}
+
+      {/* Bouton nouvelle demande */}
+      {!showForm && (
+        <button
+          onClick={() => setShowForm(true)}
+          className="w-full py-4 rounded-2xl border-2 border-dashed border-slate-600 text-slate-400 font-semibold flex items-center justify-center gap-2 active:scale-95 transition-all"
+        >
+          <Plus className="w-5 h-5" /> Nouvelle demande de congé
+        </button>
+      )}
+
+      {/* Formulaire */}
+      {showForm && (
+        <form onSubmit={handleSubmit} className="rounded-3xl bg-slate-800/60 border border-slate-700/40 p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="text-base font-bold text-white">Nouvelle demande</div>
+            <button type="button" onClick={() => { setShowForm(false); setErr(''); }}
+              className="text-slate-500 active:opacity-70">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2 block">Type</label>
+            <div className="grid grid-cols-2 gap-2">
+              {ABSENCE_TYPES.map(t => (
+                <button key={t.value} type="button"
+                  onClick={() => setForm(f => ({ ...f, type: t.value }))}
+                  className={`py-3 rounded-2xl text-sm font-semibold border transition-all active:scale-95 ${
+                    form.type === t.value
+                      ? 'bg-blue-600 border-blue-500 text-white'
+                      : 'bg-slate-700/50 border-slate-600 text-slate-300'
+                  }`}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2 block">Du</label>
+              <input type="date" value={form.start_date}
+                onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))}
+                className="w-full bg-slate-700/60 border border-slate-600 rounded-2xl px-4 py-3 text-white text-base focus:outline-none focus:border-blue-500" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2 block">Au</label>
+              <input type="date" value={form.end_date}
+                onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))}
+                className="w-full bg-slate-700/60 border border-slate-600 rounded-2xl px-4 py-3 text-white text-base focus:outline-none focus:border-blue-500" />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2 block">Motif (facultatif)</label>
+            <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+              rows={2} placeholder="Précisions éventuelles..."
+              className="w-full bg-slate-700/60 border border-slate-600 rounded-2xl px-4 py-3 text-white text-base focus:outline-none focus:border-blue-500 resize-none" />
+          </div>
+
+          {err && <p className="text-red-400 text-sm">{err}</p>}
+
+          <button type="submit" disabled={saving}
+            className="w-full py-4 rounded-2xl bg-blue-600 text-white text-base font-bold flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-60">
+            {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
+            Envoyer la demande
+          </button>
+        </form>
+      )}
+
+      {/* Historique */}
+      {loading ? (
+        <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-slate-500" /></div>
+      ) : absences.length === 0 ? (
+        <div className="rounded-3xl bg-slate-800/50 border border-slate-700/40 p-10 text-center">
+          <CalendarDays className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+          <p className="text-slate-300 font-medium">Aucune demande</p>
+          <p className="text-slate-500 text-sm mt-1">Vos congés apparaîtront ici</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-xs text-slate-500 px-1">Historique des demandes</p>
+          {absences.map(ab => {
+            const st = STATUS_STYLES[ab.status] || STATUS_STYLES.pending;
+            const type = ABSENCE_TYPES.find(t => t.value === ab.type)?.label || ab.type;
+            return (
+              <div key={ab.id} className="bg-slate-800/60 border border-slate-700/40 rounded-2xl p-4 flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-white">{type}</div>
+                  <div className="text-xs text-slate-400 mt-0.5">
+                    {new Date(ab.start_date).toLocaleDateString('fr-FR')}
+                    {ab.start_date !== ab.end_date && ` → ${new Date(ab.end_date).toLocaleDateString('fr-FR')}`}
+                    {' · '}{daysBetween(ab.start_date, ab.end_date)}j
+                  </div>
+                  {ab.notes && <div className="text-xs text-slate-500 italic mt-0.5">"{ab.notes}"</div>}
+                </div>
+                <span className={`text-xs font-semibold px-3 py-1.5 rounded-full shrink-0 ${st.cls}`}>
+                  {st.label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Notifications hook ────────────────────────────────────────────────────────
 function useNotif(token) {
   const [status, setStatus] = useState('loading');
@@ -635,9 +809,10 @@ function InstallBanner() {
 // ── Navigation bas de page ────────────────────────────────────────────────────
 function BottomNav({ active, onChange, offerCount }) {
   const tabs = [
-    { id: 'planning', icon: Calendar, label: 'Planning' },
-    { id: 'demandes', icon: Bell,     label: 'Demandes', badge: offerCount },
-    { id: 'profil',   icon: User,     label: 'Profil' },
+    { id: 'planning', icon: Calendar,     label: 'Planning' },
+    { id: 'demandes', icon: Bell,         label: 'Demandes', badge: offerCount },
+    { id: 'conges',   icon: CalendarDays, label: 'Congés' },
+    { id: 'profil',   icon: User,         label: 'Profil' },
   ];
   return (
     <nav
@@ -757,6 +932,9 @@ export default function AgentPortal() {
         )}
         {tab === 'demandes' && (
           <TabDemandes offers={offers} token={token} onReload={load} />
+        )}
+        {tab === 'conges' && (
+          <TabConges token={token} />
         )}
         {tab === 'profil' && (
           <TabProfil agent={agent} stats={stats} token={token} />

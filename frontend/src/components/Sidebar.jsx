@@ -14,7 +14,7 @@ const NAV = [
   { to: '/clients', icon: Building2, label: 'Clients' },
   { to: '/sites', icon: MapPin, label: 'Sites' },
   { to: '/recap-heures', icon: Clock, label: 'Récap heures' },
-  { to: '/absences',  icon: ClipboardList, label: 'Absences / Congés' },
+  { to: '/absences',  icon: ClipboardList, label: 'Absences / Congés', dynamicBadge: true },
   { to: '/quotes',    icon: FileText,      label: 'Devis' },
   { to: '/contracts', icon: ScrollText, label: 'Contrats' },
   { to: '/invoices',  icon: Receipt,   label: 'Factures' },
@@ -35,6 +35,17 @@ export default function Sidebar() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [installed, setInstalled] = useState(false);
+  const [pendingAbsences, setPendingAbsences] = useState(0);
+
+  useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    fetch(`${import.meta.env.VITE_API_URL || '/api'}/absences?status=pending`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }).then(r => r.json()).then(data => {
+      if (Array.isArray(data)) setPendingAbsences(data.length);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     // Capturer l'événement beforeinstallprompt
@@ -87,7 +98,7 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        {NAV.map(({ to, icon: Icon, label, badge }) => (
+        {NAV.map(({ to, icon: Icon, label, badge, dynamicBadge }) => (
           <NavLink
             key={to}
             to={to}
@@ -104,6 +115,11 @@ export default function Sidebar() {
             {badge && (
               <span className="text-xs px-1.5 py-0.5 rounded font-semibold bg-violet-600/20 text-violet-400 border border-violet-600/30">
                 {badge}
+              </span>
+            )}
+            {dynamicBadge && pendingAbsences > 0 && (
+              <span className="text-xs px-1.5 py-0.5 rounded-full font-bold bg-amber-500 text-white min-w-[18px] text-center">
+                {pendingAbsences}
               </span>
             )}
           </NavLink>

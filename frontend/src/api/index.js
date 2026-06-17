@@ -110,6 +110,8 @@ export const absencesApi = {
   create: (data) => post('/absences', data),
   update: (id, data) => put(`/absences/${id}`, data),
   delete: (id) => del(`/absences/${id}`),
+  approve: (id) => put(`/absences/${id}/approve`, {}),
+  reject: (id, reason) => put(`/absences/${id}/reject`, { reason }),
 };
 
 // Quotes

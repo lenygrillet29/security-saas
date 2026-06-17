@@ -60,6 +60,84 @@ router.put('/:id', requireWriter, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── PUT approuver ────────────────────────────────────────────────────────────
+router.put('/:id/approve', requireWriter, async (req, res) => {
+  try {
+    const absence = await db.get(
+      ABSENCES_QUERY + ' WHERE ab.id = ? AND ab.company_id = ?',
+      [req.params.id, req.user.companyId]
+    );
+    if (!absence) return res.status(404).json({ error: 'Absence non trouvée' });
+
+    await db.run('UPDATE absences SET status = ? WHERE id = ?', ['approved', req.params.id]);
+
+    // Push notification à l'agent
+    try {
+      const subs = await db.all(
+        'SELECT endpoint, p256dh, auth FROM agent_push_subscriptions WHERE agent_id = ?',
+        [absence.agent_id]
+      );
+      if (subs.length && process.env.VAPID_PUBLIC_KEY) {
+        const webpush = require('web-push');
+        for (const s of subs) {
+          await webpush.sendNotification(
+            { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+            JSON.stringify({
+              title: '✅ Demande de congé approuvée',
+              body:  `Du ${absence.start_date} au ${absence.end_date}`,
+              icon:  '/icon-192.png',
+              tag:   `absence-${absence.id}`,
+            })
+          ).catch(() => {});
+        }
+      }
+    } catch {}
+
+    res.json(await db.get(ABSENCES_QUERY + ' WHERE ab.id = ?', [req.params.id]));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── PUT refuser ──────────────────────────────────────────────────────────────
+router.put('/:id/reject', requireWriter, async (req, res) => {
+  try {
+    const absence = await db.get(
+      ABSENCES_QUERY + ' WHERE ab.id = ? AND ab.company_id = ?',
+      [req.params.id, req.user.companyId]
+    );
+    if (!absence) return res.status(404).json({ error: 'Absence non trouvée' });
+
+    const { reason } = req.body;
+    await db.run(
+      'UPDATE absences SET status = ?, notes = COALESCE(?, notes) WHERE id = ?',
+      ['rejected', reason || null, req.params.id]
+    );
+
+    // Push notification à l'agent
+    try {
+      const subs = await db.all(
+        'SELECT endpoint, p256dh, auth FROM agent_push_subscriptions WHERE agent_id = ?',
+        [absence.agent_id]
+      );
+      if (subs.length && process.env.VAPID_PUBLIC_KEY) {
+        const webpush = require('web-push');
+        for (const s of subs) {
+          await webpush.sendNotification(
+            { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+            JSON.stringify({
+              title: '❌ Demande de congé refusée',
+              body:  `Du ${absence.start_date} au ${absence.end_date}${reason ? ' — ' + reason : ''}`,
+              icon:  '/icon-192.png',
+              tag:   `absence-${absence.id}`,
+            })
+          ).catch(() => {});
+        }
+      }
+    } catch {}
+
+    res.json(await db.get(ABSENCES_QUERY + ' WHERE ab.id = ?', [req.params.id]));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.delete('/:id', requireWriter, async (req, res) => {
   try {
     const existing = await db.get('SELECT id FROM absences WHERE id = ? AND company_id = ?', [req.params.id, req.user.companyId]);

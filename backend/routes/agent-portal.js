@@ -138,6 +138,43 @@ router.post('/:token/offers/:offerId/:action', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── GET /api/agent-portal/:token/absences ────────────────────────────────────
+router.get('/:token/absences', async (req, res) => {
+  try {
+    const agent = await resolveAgent(req.params.token);
+    if (!agent) return res.status(404).json({ error: 'Lien invalide' });
+
+    const absences = await db.all(
+      `SELECT id, start_date, end_date, type, status, notes, created_at
+       FROM absences WHERE agent_id = ? ORDER BY start_date DESC LIMIT 20`,
+      [agent.id]
+    );
+    res.json(absences);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/agent-portal/:token/absences ────────────────────────────────────
+router.post('/:token/absences', async (req, res) => {
+  try {
+    const agent = await resolveAgent(req.params.token);
+    if (!agent) return res.status(404).json({ error: 'Lien invalide' });
+
+    const { start_date, end_date, type, notes } = req.body;
+    if (!start_date || !end_date || !type)
+      return res.status(400).json({ error: 'start_date, end_date et type requis' });
+    if (end_date < start_date)
+      return res.status(400).json({ error: 'La date de fin doit être après la date de début' });
+
+    const result = await db.insert(
+      `INSERT INTO absences (company_id, agent_id, start_date, end_date, type, status, notes, requested_by_agent)
+       VALUES (?, ?, ?, ?, ?, 'pending', ?, 1)`,
+      [agent.company_id, agent.id, start_date, end_date, type, notes || null]
+    );
+
+    res.status(201).json({ id: result.lastInsertRowid, status: 'pending' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── POST /api/agent-portal/:token/checkin/:shiftId ───────────────────────────
 router.post('/:token/checkin/:shiftId', async (req, res) => {
   try {

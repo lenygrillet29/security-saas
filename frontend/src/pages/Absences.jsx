@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, Search, Calendar, UserCheck, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Calendar, UserCheck, X, CheckCircle, XCircle, Smartphone } from 'lucide-react';
 import { absencesApi, agentsApi } from '../api';
 import Modal from '../components/Modal';
 import Confirm from '../components/Confirm';
@@ -213,6 +213,18 @@ function AbsencesInner() {
     );
   });
 
+  const pending = absences.filter(a => a.status === 'pending');
+
+  async function handleApprove(id) {
+    try { await absencesApi.approve(id); toast('Demande approuvée ✅'); load(); }
+    catch (e) { toast(e.message, 'error'); }
+  }
+
+  async function handleReject(id) {
+    try { await absencesApi.reject(id); toast('Demande refusée'); load(); }
+    catch (e) { toast(e.message, 'error'); }
+  }
+
   const totalsByType = TYPES.map(t => ({
     ...t,
     count: absences.filter(a => a.type === t.value && a.status !== 'rejected').length,
@@ -228,6 +240,47 @@ function AbsencesInner() {
           <Plus className="w-4 h-4" /> Nouvelle absence
         </button>
       </div>
+
+      {/* Demandes en attente */}
+      {pending.length > 0 && (
+        <div className="bg-amber-600/10 border border-amber-600/30 rounded-xl p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Smartphone className="w-4 h-4 text-amber-400" />
+            <span className="text-sm font-semibold text-amber-300">
+              {pending.length} demande{pending.length > 1 ? 's' : ''} en attente de validation
+            </span>
+          </div>
+          <div className="space-y-2">
+            {pending.map(ab => (
+              <div key={ab.id} className="bg-dark-800 border border-dark-600 rounded-lg p-3 flex items-center gap-3 flex-wrap">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+                  style={{ backgroundColor: ab.agent_color || '#3B82F6' }}>
+                  {ab.first_name?.[0]}{ab.last_name?.[0]}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-white">{ab.first_name} {ab.last_name}</div>
+                  <div className="text-xs text-slate-400">
+                    {typeInfo(ab.type).label} · {format(new Date(ab.start_date), 'dd/MM/yyyy')}
+                    {ab.start_date !== ab.end_date && ` → ${format(new Date(ab.end_date), 'dd/MM/yyyy')}`}
+                    {' '}· {daysBetween(ab.start_date, ab.end_date)}j
+                  </div>
+                  {ab.notes && <div className="text-xs text-slate-500 italic mt-0.5">"{ab.notes}"</div>}
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <button onClick={() => handleReject(ab.id)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600/15 border border-red-600/30 text-red-400 text-xs font-semibold hover:bg-red-600/25 transition-colors">
+                    <XCircle className="w-3.5 h-3.5" /> Refuser
+                  </button>
+                  <button onClick={() => handleApprove(ab.id)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/15 border border-emerald-600/30 text-emerald-400 text-xs font-semibold hover:bg-emerald-600/25 transition-colors">
+                    <CheckCircle className="w-3.5 h-3.5" /> Approuver
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

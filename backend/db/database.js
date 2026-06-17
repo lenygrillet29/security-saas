@@ -387,6 +387,11 @@ async function init() {
     );
   `);
 
+  // ── Demandes d'absence depuis le portail agent ───────────────────────────────
+  await pool.query(`
+    ALTER TABLE absences ADD COLUMN IF NOT EXISTS requested_by_agent INTEGER DEFAULT 0;
+  `);
+
   console.log('[DB] PostgreSQL connecté — schéma multi-tenant initialisé');
 }
 
