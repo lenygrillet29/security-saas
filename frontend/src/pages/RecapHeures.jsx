@@ -111,6 +111,7 @@ export default function RecapHeures() {
   });
 
   return (
+    <>
     <div className="space-y-5 animate-fade-in">
       {/* Header */}
       <div className="page-header">
@@ -301,5 +302,6 @@ export default function RecapHeures() {
     </div>
 
     {quickViewId && <AgentQuickView agentId={quickViewId} onClose={() => setQuickViewId(null)} />}
+    </>
   );
 }
