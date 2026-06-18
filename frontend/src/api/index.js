@@ -263,6 +263,15 @@ export const expensesApi = {
   reject:  (id, reason) => post(`/expenses/${id}/reject`, { reason }),
 };
 
+// Messagerie interne
+export const messagesApi = {
+  threads:     () => get('/messages/threads'),
+  unreadCount: () => get('/messages/unread-count'),
+  thread:      (agentId) => get(`/messages/agent/${agentId}`),
+  send:        (agentId, body) => post(`/messages/agent/${agentId}`, { body }),
+  delete:      (id) => del(`/messages/${id}`),
+};
+
 // Documents agents
 export const agentDocumentsApi = {
   list:   (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/agent-documents${q ? `?${q}` : ''}`); },

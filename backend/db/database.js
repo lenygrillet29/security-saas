@@ -443,6 +443,22 @@ async function init() {
     );
   `);
 
+  // ── Messagerie interne ────────────────────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS messages (
+      id           SERIAL PRIMARY KEY,
+      company_id   INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      thread_key   TEXT NOT NULL,
+      sender_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      sender_type  TEXT NOT NULL DEFAULT 'user',
+      recipient_agent_id INTEGER REFERENCES agents(id) ON DELETE CASCADE,
+      body         TEXT NOT NULL,
+      read_at      TIMESTAMP,
+      created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(company_id, thread_key);
+  `);
+
   // ── Documents agents ──────────────────────────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS agent_documents (

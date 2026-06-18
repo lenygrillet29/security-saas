@@ -115,6 +115,7 @@ app.use('/api/equipments',        require('./routes/equipments'));        // Ges
 app.use('/api/trainings',         require('./routes/trainings'));         // Formations & habilitations
 app.use('/api/incidents',         require('./routes/incidents'));         // Incidents sur sites
 app.use('/api/agent-documents',   require('./routes/agent-documents'));   // Documents agents
+app.use('/api/messages',          require('./routes/messages'));          // Messagerie interne
 app.use('/api/contract-templates', require('./routes/contract-templates')); // Modèles de contrats
 app.use('/api/audit',    require('./routes/audit'));     // Journal d'audit
 app.use('/api/export',   require('./routes/export'));    // Export CSV comptable
