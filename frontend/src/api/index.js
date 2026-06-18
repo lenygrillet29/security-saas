@@ -102,7 +102,8 @@ export const shiftsApi = {
   },
   replacements: (id) => get(`/shifts/${id}/replacements`),
   overtime: (weeks = 4) => get(`/shifts/stats/overtime?weeks=${weeks}`),
-  copyDay: (from_date, to_date, copy_agents) => post('/shifts/copy-day', { from_date, to_date, copy_agents }),
+  copyDay:  (from_date, to_date, copy_agents) => post('/shifts/copy-day',  { from_date, to_date, copy_agents }),
+  copyWeek: (from_start, to_start, copy_agents, skip_existing) => post('/shifts/copy-week', { from_start, to_start, copy_agents, skip_existing }),
   createRecurring: (data) => post('/shifts/recurring', data),
   deleteRecurrence: (recurrenceId, from_date) => {
     const q = from_date ? `?from_date=${from_date}` : '';

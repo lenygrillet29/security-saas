@@ -1107,6 +1107,127 @@ function CopyDayModal({ defaultFrom, onClose, onCopied }) {
   );
 }
 
+// ——— Modal copie de semaine ———
+function CopyWeekModal({ currentWeekStart, onClose, onCopied }) {
+  const toast = useToast();
+  const prevWeekStart = format(subWeeks(currentWeekStart, 1), 'yyyy-MM-dd');
+  const [fromStart, setFromStart] = useState(prevWeekStart);
+  const [copyAgents, setCopyAgents] = useState(true);
+  const [skipExisting, setSkipExisting] = useState(true);
+  const [preview, setPreview] = useState(null);
+  const [loading, setLoading]  = useState(false);
+  const [saving, setSaving]    = useState(false);
+
+  const toStart = format(currentWeekStart, 'yyyy-MM-dd');
+  const toEnd   = format(endOfWeek(currentWeekStart, { weekStartsOn: 1 }), 'yyyy-MM-dd');
+
+  useEffect(() => {
+    if (!fromStart) { setPreview(null); return; }
+    setLoading(true);
+    const fromEnd = format(endOfWeek(parseISO(fromStart), { weekStartsOn: 1 }), 'yyyy-MM-dd');
+    shiftsApi.list({ start_date: fromStart, end_date: fromEnd })
+      .then(shifts => setPreview(shifts))
+      .catch(() => setPreview([]))
+      .finally(() => setLoading(false));
+  }, [fromStart]);
+
+  async function handleCopy() {
+    setSaving(true);
+    try {
+      const res = await shiftsApi.copyWeek(fromStart, toStart, copyAgents, skipExisting);
+      toast(`${res.created} vacation${res.created > 1 ? 's' : ''} copiée${res.created > 1 ? 's' : ''}${res.skipped > 0 ? ` (${res.skipped} ignorée${res.skipped > 1 ? 's' : ''})` : ''} ✅`);
+      onCopied();
+      onClose();
+    } catch (e) { toast(e.message, 'error'); }
+    finally { setSaving(false); }
+  }
+
+  const fromLabel = fromStart ? `du ${format(parseISO(fromStart), 'd MMM', { locale: fr })} au ${format(endOfWeek(parseISO(fromStart), { weekStartsOn: 1 }), 'd MMM yyyy', { locale: fr })}` : '—';
+  const toLabel   = `du ${format(currentWeekStart, 'd MMM', { locale: fr })} au ${format(endOfWeek(currentWeekStart, { weekStartsOn: 1 }), 'd MMM yyyy', { locale: fr })}`;
+
+  return (
+    <Modal title="Copier une semaine" onClose={onClose} size="md">
+      <div className="space-y-5">
+        {/* Semaine cible (fixe = semaine courante) */}
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-blue-500/10 border border-blue-500/20">
+          <Copy className="w-4 h-4 text-blue-400 shrink-0" />
+          <div>
+            <p className="text-xs text-blue-300 font-medium">Copier vers la semaine courante</p>
+            <p className="text-sm text-white">{toLabel}</p>
+          </div>
+        </div>
+
+        <div>
+          <label className="label">Semaine à copier (source)</label>
+          <input type="date" className="input" value={fromStart} onChange={e => setFromStart(e.target.value)} />
+          {fromStart && <p className="text-xs text-slate-500 mt-1">{fromLabel}</p>}
+        </div>
+
+        <div className="space-y-3">
+          <label className="flex items-center gap-3 cursor-pointer select-none">
+            <div onClick={() => setCopyAgents(v => !v)}
+              className={`w-10 h-6 rounded-full transition-colors relative shrink-0 ${copyAgents ? 'bg-blue-600' : 'bg-dark-500'}`}>
+              <span className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${copyAgents ? 'translate-x-5' : 'translate-x-1'}`} />
+            </div>
+            <span className="text-sm text-slate-300">Copier les agents assignés</span>
+          </label>
+          <label className="flex items-center gap-3 cursor-pointer select-none">
+            <div onClick={() => setSkipExisting(v => !v)}
+              className={`w-10 h-6 rounded-full transition-colors relative shrink-0 ${skipExisting ? 'bg-blue-600' : 'bg-dark-500'}`}>
+              <span className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${skipExisting ? 'translate-x-5' : 'translate-x-1'}`} />
+            </div>
+            <span className="text-sm text-slate-300">Ignorer les jours déjà planifiés</span>
+          </label>
+        </div>
+
+        {/* Aperçu */}
+        <div className="bg-dark-900 rounded-xl border border-dark-600 overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-dark-600 flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              Aperçu semaine source
+            </span>
+            {loading && <RefreshCw className="w-3.5 h-3.5 text-slate-500 animate-spin" />}
+          </div>
+          {!preview || loading ? (
+            <div className="px-4 py-6 text-center text-slate-500 text-sm">Chargement…</div>
+          ) : preview.length === 0 ? (
+            <div className="px-4 py-6 text-center text-slate-500 text-sm">Aucune vacation cette semaine-là</div>
+          ) : (
+            <div className="divide-y divide-dark-700 max-h-52 overflow-y-auto">
+              {preview.map(s => (
+                <div key={s.id} className="flex items-center gap-3 px-4 py-2">
+                  {copyAgents && s.agent_color
+                    ? <span className="w-2 h-2 rounded-full shrink-0" style={{ background: s.agent_color }} />
+                    : <span className="w-2 h-2 rounded-full shrink-0 bg-slate-600" />}
+                  <span className="text-xs text-slate-400 w-16 shrink-0">{format(parseISO(s.date), 'EEE d/MM', { locale: fr })}</span>
+                  <span className="text-sm text-white flex-1 truncate">
+                    {copyAgents && s.agent_first_name ? `${s.agent_first_name} ${s.agent_last_name} — ` : ''}{s.site_name}
+                  </span>
+                  <span className="text-xs text-slate-400 shrink-0">{s.start_time?.slice(0,5)} – {s.end_time?.slice(0,5)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {preview?.length > 0 && (
+            <div className="px-4 py-2 border-t border-dark-600 text-xs text-slate-500">
+              {preview.length} vacation{preview.length > 1 ? 's' : ''} à copier vers {toLabel}
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-3">
+          <button onClick={onClose} className="btn-secondary">Annuler</button>
+          <button onClick={handleCopy} disabled={saving || !preview?.length}
+            className="btn-primary disabled:opacity-50 flex items-center gap-2">
+            {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Copy className="w-4 h-4" />}
+            Copier la semaine {preview?.length > 0 ? `(${preview.length})` : ''}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ——— Main Planning ———
 function PlanningInner() {
   const toast = useToast();
@@ -1125,7 +1246,8 @@ function PlanningInner() {
   const [offerShift, setOfferShift] = useState(null); // shift pour lequel envoyer des offres
   const [offers, setOffers] = useState([]); // toutes les offres de la période
   const [loading, setLoading] = useState(false);
-  const [copyModal, setCopyModal] = useState(null); // { fromDate }
+  const [copyModal, setCopyModal]     = useState(null); // { fromDate }
+  const [copyWeekModal, setCopyWeekModal] = useState(false);
   const [quickViewId, setQuickViewId] = useState(null);
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
@@ -1238,6 +1360,11 @@ function PlanningInner() {
           <button className="btn-secondary" onClick={() => setExportModal(true)}>
             <Download className="w-4 h-4" /> Export PDF
           </button>
+          {view === 'week' && (
+            <button className="btn-secondary" onClick={() => setCopyWeekModal(true)}>
+              <Copy className="w-4 h-4" /> Copier la semaine
+            </button>
+          )}
           <button className="btn-secondary" onClick={() => setCopyModal({ fromDate: format(view === 'week' ? weekStart : currentDate, 'yyyy-MM-dd') })}>
             <Copy className="w-4 h-4" /> Copier un jour
           </button>
@@ -1361,6 +1488,13 @@ function PlanningInner() {
         <CopyDayModal
           defaultFrom={copyModal.fromDate}
           onClose={() => setCopyModal(null)}
+          onCopied={fetchData}
+        />
+      )}
+      {copyWeekModal && (
+        <CopyWeekModal
+          currentWeekStart={weekStart}
+          onClose={() => setCopyWeekModal(false)}
           onCopied={fetchData}
         />
       )}

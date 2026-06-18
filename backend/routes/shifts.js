@@ -440,6 +440,71 @@ router.post('/copy-day', requireWriter, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// POST /api/shifts/copy-week — copie tous les shifts d'une semaine vers une autre
+router.post('/copy-week', requireWriter, async (req, res) => {
+  try {
+    const { from_start, to_start, copy_agents = true, skip_existing = true } = req.body;
+    if (!from_start || !to_start) return res.status(400).json({ error: 'from_start et to_start requis' });
+    if (from_start === to_start) return res.status(400).json({ error: 'Les semaines source et cible doivent être différentes' });
+
+    // Calculer les 7 jours de la semaine source
+    const fromDate = new Date(from_start + 'T12:00:00Z');
+    const source   = await db.all(
+      `SELECT site_id, agent_id, start_time, end_time, notes, date
+       FROM shifts WHERE company_id = ? AND date >= ? AND date < ?
+       ORDER BY date, start_time`,
+      [req.user.companyId, from_start,
+        new Date(fromDate.getTime() + 7 * 86400000).toISOString().slice(0, 10)]
+    );
+
+    if (!source.length) return res.status(404).json({ error: 'Aucune vacation dans la semaine source' });
+
+    // Décalage en jours entre les deux semaines
+    const toDate   = new Date(to_start + 'T12:00:00Z');
+    const offsetMs = toDate.getTime() - fromDate.getTime();
+    const offsetDays = Math.round(offsetMs / 86400000);
+
+    // Si skip_existing : récupérer les dates déjà planifiées dans la semaine cible
+    let existingDates = new Set();
+    if (skip_existing) {
+      const existing = await db.all(
+        `SELECT DISTINCT date FROM shifts WHERE company_id = ? AND date >= ? AND date < ?`,
+        [req.user.companyId, to_start,
+          new Date(toDate.getTime() + 7 * 86400000).toISOString().slice(0, 10)]
+      );
+      existingDates = new Set(existing.map(r => r.date));
+    }
+
+    let created = 0;
+    let skipped = 0;
+    for (const s of source) {
+      const srcDate  = new Date(s.date + 'T12:00:00Z');
+      const destDate = new Date(srcDate.getTime() + offsetDays * 86400000).toISOString().slice(0, 10);
+
+      if (skip_existing && existingDates.has(destDate)) { skipped++; continue; }
+
+      const hours = calculateHours(destDate, s.start_time, s.end_time);
+      await db.insert(
+        `INSERT INTO shifts (company_id, agent_id, site_id, date, start_time, end_time,
+          hours_day, hours_night, hours_sunday, hours_sunday_night,
+          hours_holiday, hours_holiday_night, hours_holiday_sunday_day, hours_holiday_sunday_night, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [req.user.companyId,
+          copy_agents ? (s.agent_id || null) : null,
+          s.site_id, destDate, s.start_time, s.end_time,
+          hours.hours_day, hours.hours_night, hours.hours_sunday, hours.hours_sunday_night,
+          hours.hours_holiday, hours.hours_holiday_night,
+          hours.hours_holiday_sunday_day, hours.hours_holiday_sunday_night,
+          s.notes || null]
+      );
+      created++;
+    }
+
+    logAudit(req, { action: 'COPY_WEEK', entityType: 'shifts', details: { from_start, to_start, created, skipped } });
+    res.json({ success: true, created, skipped });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // POST /api/shifts/recurring — crée une série de shifts récurrents
 router.post('/recurring', requireWriter, async (req, res) => {
   try {
