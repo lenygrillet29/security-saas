@@ -449,14 +449,20 @@ async function init() {
       id           SERIAL PRIMARY KEY,
       company_id   INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
       thread_key   TEXT NOT NULL,
+      thread_type  TEXT NOT NULL DEFAULT 'agent',
       sender_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
       sender_type  TEXT NOT NULL DEFAULT 'user',
       recipient_agent_id INTEGER REFERENCES agents(id) ON DELETE CASCADE,
+      recipient_user_id  INTEGER REFERENCES users(id)  ON DELETE CASCADE,
       body         TEXT NOT NULL,
       read_at      TIMESTAMP,
       created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(company_id, thread_key);
+  `);
+  await pool.query(`
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS thread_type TEXT NOT NULL DEFAULT 'agent';
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS recipient_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE;
   `);
 
   // ── Documents agents ──────────────────────────────────────────────────────────

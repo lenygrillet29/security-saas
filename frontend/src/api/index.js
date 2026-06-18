@@ -265,11 +265,19 @@ export const expensesApi = {
 
 // Messagerie interne
 export const messagesApi = {
-  threads:     () => get('/messages/threads'),
-  unreadCount: () => get('/messages/unread-count'),
-  thread:      (agentId) => get(`/messages/agent/${agentId}`),
-  send:        (agentId, body) => post(`/messages/agent/${agentId}`, { body }),
-  delete:      (id) => del(`/messages/${id}`),
+  threads:      () => get('/messages/threads'),
+  unreadCount:  () => get('/messages/unread-count'),
+  users:        () => get('/messages/users'),
+  // Fil agent
+  agentThread:  (agentId) => get(`/messages/agent/${agentId}`),
+  sendToAgent:  (agentId, body) => post(`/messages/agent/${agentId}`, { body }),
+  // Canal équipe
+  teamThread:   () => get('/messages/team'),
+  sendToTeam:   (body) => post('/messages/team', { body }),
+  // Fil utilisateur
+  userThread:   (userId) => get(`/messages/user/${userId}`),
+  sendToUser:   (userId, body) => post(`/messages/user/${userId}`, { body }),
+  delete:       (id) => del(`/messages/${id}`),
 };
 
 // Documents agents
