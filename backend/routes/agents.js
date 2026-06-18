@@ -195,6 +195,23 @@ router.post('/:id/send-portal', requireWriter, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── Lien portail (copier sans envoyer email) ─────────────────────────────────
+router.get('/:id/portal-link', requireWriter, async (req, res) => {
+  try {
+    const agent = await db.get('SELECT id, agent_token FROM agents WHERE id = ? AND company_id = ?', [req.params.id, req.user.companyId]);
+    if (!agent) return res.status(404).json({ error: 'Agent non trouvé' });
+
+    let token = agent.agent_token;
+    if (!token) {
+      token = randomUUID();
+      await db.run('UPDATE agents SET agent_token = ? WHERE id = ?', [token, agent.id]);
+    }
+
+    const appUrl = process.env.APP_URL || 'https://securoplan.vercel.app';
+    res.json({ url: `${appUrl}/agent/${token}` });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── Archive / Désarchive ─────────────────────────────────────────────────────
 router.post('/:id/archive', requireWriter, async (req, res) => {
   try {

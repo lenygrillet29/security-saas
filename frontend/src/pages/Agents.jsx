@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Plus, Edit2, Trash2, Phone, Mail, Search, Download, Archive, ArchiveRestore, Send, AlertTriangle, Zap, Smartphone, User, MapPin, CreditCard, Shield, CalendarDays, ChevronDown, ChevronUp, Camera, X, BadgeCheck, Upload, CheckCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, Phone, Mail, Search, Download, Archive, ArchiveRestore, Send, AlertTriangle, Zap, Smartphone, User, MapPin, CreditCard, Shield, CalendarDays, ChevronDown, ChevronUp, Camera, X, BadgeCheck, Upload, CheckCircle, Link2 } from 'lucide-react';
 import { agentsApi, shiftsApi, pdfApi, emailApi, addonsApi } from '../api';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Modal from '../components/Modal';
@@ -484,6 +484,14 @@ function AgentsInner() {
     } catch (err) { toast(err.message, 'error'); }
   }
 
+  async function handleCopyPortalLink(agent) {
+    try {
+      const { url } = await agentsApi.getPortalLink(agent.id);
+      await navigator.clipboard.writeText(url);
+      toast('Lien portail copié dans le presse-papiers 📋');
+    } catch (err) { toast(err.message || 'Impossible de copier', 'error'); }
+  }
+
   const filtered = agents.filter(a => {
     const matchSearch = `${a.first_name} ${a.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
       (a.employee_number || '').includes(search);
@@ -647,9 +655,16 @@ function AgentsInner() {
                         <button
                           onClick={() => handleSendPortal(agent)}
                           className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-600/10 rounded-lg transition-colors"
-                          title="Envoyer le lien appli mobile"
+                          title="Envoyer le lien appli mobile par email"
                         >
                           <Smartphone className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleCopyPortalLink(agent)}
+                          className="p-1.5 text-slate-400 hover:text-violet-400 hover:bg-violet-600/10 rounded-lg transition-colors"
+                          title="Copier le lien portail agent"
+                        >
+                          <Link2 className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => handleArchive(agent)}

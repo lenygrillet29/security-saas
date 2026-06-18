@@ -61,6 +61,7 @@ export const agentsApi = {
   archive: (id) => post(`/agents/${id}/archive`, {}),
   unarchive: (id) => post(`/agents/${id}/unarchive`, {}),
   sendPortal: (id) => post(`/agents/${id}/send-portal`, {}),
+  getPortalLink: (id) => get(`/agents/${id}/portal-link`),
   available: (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/agents/available${q ? `?${q}` : ''}`); },
   carteProAlerts: () => get('/agents/carte-pro-alerts'),
   import: (rows) => post('/agents/import', { rows }),
