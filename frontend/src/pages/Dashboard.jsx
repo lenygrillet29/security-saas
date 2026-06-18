@@ -7,6 +7,7 @@ import {
   Siren, CheckSquare, Circle, FolderOpen, GraduationCap, Package,
 } from 'lucide-react';
 import { agentsApi, clientsApi, sitesApi, shiftsApi, invoicesApi, shiftOffersApi, get } from '../api';
+import OnboardingWizard from '../components/OnboardingWizard';
 import { TrendingUp } from 'lucide-react';
 
 const fmt = n => n >= 1000 ? `${(n/1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(Math.round(n));
@@ -175,6 +176,7 @@ export default function Dashboard() {
   const [todayTasks, setTodayTasks]         = useState([]);
   const [recentIncidents, setRecentIncidents] = useState([]);
   const [notifData, setNotifData]           = useState({ count: 0, items: [] });
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   const today      = new Date();
   const todayStr   = format(today, 'yyyy-MM-dd');
@@ -225,6 +227,11 @@ export default function Dashboard() {
       const incList = Array.isArray(incidents) ? incidents : (incidents?.items || []);
       setRecentIncidents(incList.slice(0, 5));
       setNotifData(notifs || { count: 0, items: [] });
+      // Afficher l'onboarding si le compte est vide et pas déjà refusé
+      const dismissed = localStorage.getItem('sp_onboarding_done');
+      if (!dismissed && a.length === 0 && c.length === 0 && s.length === 0) {
+        setShowOnboarding(true);
+      }
     }).finally(() => setLoading(false));
   }, []);
 
@@ -247,8 +254,14 @@ export default function Dashboard() {
   // Agents actuellement en poste (checkin sans checkout)
   const inService        = todayAssigned.filter(s => s.checkin_at && !s.checkout_at);
 
+  function closeOnboarding() {
+    localStorage.setItem('sp_onboarding_done', '1');
+    setShowOnboarding(false);
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
+      {showOnboarding && <OnboardingWizard onClose={closeOnboarding} />}
       <div className="page-header">
         <div>
           <h1 className="page-title">Tableau de bord</h1>
