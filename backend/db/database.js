@@ -462,6 +462,31 @@ async function init() {
     );
   `);
 
+  // ── Groupes de messagerie ─────────────────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS message_groups (
+      id          SERIAL PRIMARY KEY,
+      company_id  INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      name        TEXT NOT NULL,
+      description TEXT,
+      created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      agents_can_reply BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS message_group_members (
+      id       SERIAL PRIMARY KEY,
+      group_id INTEGER NOT NULL REFERENCES message_groups(id) ON DELETE CASCADE,
+      user_id  INTEGER REFERENCES users(id)  ON DELETE CASCADE,
+      agent_id INTEGER REFERENCES agents(id) ON DELETE CASCADE
+    );
+  `);
+  await pool.query(`
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS group_id INTEGER REFERENCES message_groups(id) ON DELETE CASCADE;
+  `);
+  await pool.query(`
+    ALTER TABLE message_groups ADD COLUMN IF NOT EXISTS agents_can_reply BOOLEAN NOT NULL DEFAULT TRUE;
+  `);
+
   // ── Messagerie interne ────────────────────────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS messages (

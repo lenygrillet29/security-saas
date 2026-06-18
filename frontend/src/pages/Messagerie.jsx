@@ -60,11 +60,12 @@ function ThreadRow({ t, active, onClick }) {
 function NewModal({ users, agents, onClose, onDone }) {
   const toast = useToast();
   const [step, setStep]     = useState('choose'); // choose | agent | group
-  const [groupName, setGroupName]   = useState('');
-  const [groupDesc, setGroupDesc]   = useState('');
-  const [selUsers, setSelUsers]     = useState([]);
-  const [selAgents, setSelAgents]   = useState([]);
-  const [searchQ, setSearchQ]       = useState('');
+  const [groupName, setGroupName]           = useState('');
+  const [groupDesc, setGroupDesc]           = useState('');
+  const [agentsCanReply, setAgentsCanReply] = useState(true);
+  const [selUsers, setSelUsers]             = useState([]);
+  const [selAgents, setSelAgents]           = useState([]);
+  const [searchQ, setSearchQ]               = useState('');
 
   function toggleUser(id)  { setSelUsers(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]); }
   function toggleAgent(id) { setSelAgents(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]); }
@@ -72,7 +73,7 @@ function NewModal({ users, agents, onClose, onDone }) {
   async function createGroup() {
     if (!groupName.trim()) return;
     try {
-      await messagesApi.createGroup({ name: groupName.trim(), description: groupDesc, user_ids: selUsers, agent_ids: selAgents });
+      await messagesApi.createGroup({ name: groupName.trim(), description: groupDesc, agents_can_reply: agentsCanReply, user_ids: selUsers, agent_ids: selAgents });
       toast('Groupe créé', 'success');
       onDone(); onClose();
     } catch (e) { toast(e.message, 'error'); }
@@ -141,6 +142,20 @@ function NewModal({ users, agents, onClose, onDone }) {
         <label className="label">Description (optionnel)</label>
         <input className="input" placeholder="…" value={groupDesc} onChange={e => setGroupDesc(e.target.value)} />
       </div>
+      <button type="button" onClick={() => setAgentsCanReply(s => !s)}
+        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-colors ${agentsCanReply ? 'border-emerald-600/40 bg-emerald-500/10' : 'border-dark-600 bg-dark-700/50'}`}>
+        <div className="text-left">
+          <div className={`text-sm font-medium ${agentsCanReply ? 'text-emerald-300' : 'text-slate-400'}`}>
+            Les agents peuvent répondre
+          </div>
+          <div className="text-xs text-slate-500 mt-0.5">
+            {agentsCanReply ? 'Échanges bidirectionnels dans le groupe' : 'Diffusion uniquement — agents en lecture seule'}
+          </div>
+        </div>
+        <div className={`w-10 h-5 rounded-full transition-colors relative shrink-0 ${agentsCanReply ? 'bg-emerald-500' : 'bg-dark-500'}`}>
+          <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${agentsCanReply ? 'translate-x-5' : 'translate-x-0.5'}`} />
+        </div>
+      </button>
       <div>
         <label className="label">Ajouter des membres</label>
         <input className="input text-sm mb-2" placeholder="Rechercher…" value={searchQ} onChange={e => setSearchQ(e.target.value)} />
@@ -435,11 +450,18 @@ export default function Messagerie() {
               />
               <div className="flex-1 min-w-0">
                 <div className="text-white font-semibold text-sm">{headerName}</div>
-                <div className="text-xs text-slate-500">
-                  {active.thread_type === 'team'  && 'Canal partagé — toute l\'équipe'}
-                  {active.thread_type === 'group' && `Groupe · ${active.member_count || ''} membres`}
-                  {active.thread_type === 'user'  && 'Message direct — collaborateur'}
-                  {active.thread_type === 'agent' && 'Message direct — agent'}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-slate-500">
+                    {active.thread_type === 'team'  && 'Canal partagé — toute l\'équipe'}
+                    {active.thread_type === 'group' && `Groupe · ${active.member_count || ''} membres`}
+                    {active.thread_type === 'user'  && 'Message direct — collaborateur'}
+                    {active.thread_type === 'agent' && 'Message direct — agent'}
+                  </span>
+                  {active.thread_type === 'group' && (
+                    active.agents_can_reply
+                      ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">Agents peuvent répondre</span>
+                      : <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30">Diffusion seulement</span>
+                  )}
                 </div>
               </div>
               {active.thread_type === 'group' && (
