@@ -8,6 +8,7 @@ const {
   generateQuote,
   generateInvoice,
   generateAgentBadge,
+  generateRHReport,
 } = require('../utils/pdfGenerator');
 
 async function getSettings(companyId) {
@@ -528,6 +529,91 @@ router.get('/vacation-report/:id', async (req, res) => {
     }
 
     streamPdf(res, doc, `rapport_vacation_${report.agent_last}_${report.report_date}.pdf`);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /pdf/rh-report?month=2026-06
+router.get('/rh-report', async (req, res) => {
+  try {
+    const month = req.query.month || new Date().toISOString().slice(0, 7);
+    const [year, mon] = month.split('-');
+    const startDate = `${month}-01`;
+    const endDate   = new Date(Number(year), Number(mon), 0).toISOString().slice(0, 10);
+
+    const agents = await db.all(
+      `SELECT id, first_name, last_name, color, contract_type, employee_number, carte_pro_expiry
+       FROM agents WHERE company_id = ? AND active = 1 ORDER BY last_name, first_name`,
+      [req.user.companyId]
+    );
+
+    const today = new Date().toISOString().slice(0, 10);
+    const results = await Promise.all(agents.map(async (a) => {
+      const hoursRow = await db.get(`
+        SELECT
+          COALESCE(SUM(hours_day),0)                  AS hours_day,
+          COALESCE(SUM(hours_night),0)                AS hours_night,
+          COALESCE(SUM(hours_sunday),0)               AS hours_sunday,
+          COALESCE(SUM(hours_sunday_night),0)         AS hours_sunday_night,
+          COALESCE(SUM(hours_holiday),0)              AS hours_holiday,
+          COALESCE(SUM(hours_holiday_night),0)        AS hours_holiday_night,
+          COALESCE(SUM(hours_holiday_sunday_day),0)   AS hours_holiday_sunday_day,
+          COALESCE(SUM(hours_holiday_sunday_night),0) AS hours_holiday_sunday_night,
+          COUNT(*) AS shift_count
+        FROM shifts WHERE agent_id = ? AND company_id = ? AND date >= ? AND date <= ?
+      `, [a.id, req.user.companyId, startDate, endDate]);
+
+      const totalHours = ['hours_day','hours_night','hours_sunday','hours_sunday_night',
+        'hours_holiday','hours_holiday_night','hours_holiday_sunday_day','hours_holiday_sunday_night']
+        .reduce((s, k) => s + (parseFloat(hoursRow[k]) || 0), 0);
+
+      const absences = await db.all(
+        `SELECT type, status, start_date, end_date FROM absences
+         WHERE agent_id = ? AND company_id = ? AND start_date <= ? AND end_date >= ?`,
+        [a.id, req.user.companyId, endDate, startDate]
+      );
+      const absenceDays = absences.filter(ab => ab.status === 'approved').reduce((s, ab) => {
+        const s1 = new Date(Math.max(new Date(ab.start_date), new Date(startDate)));
+        const e1 = new Date(Math.min(new Date(ab.end_date), new Date(endDate)));
+        return s + Math.max(0, Math.round((e1 - s1) / 86400000) + 1);
+      }, 0);
+
+      const cpRow = await db.get(
+        `SELECT COALESCE(SUM(days), 0) AS balance FROM cp_transactions WHERE agent_id = ? AND company_id = ?`,
+        [a.id, req.user.companyId]
+      );
+
+      const expRow = await db.get(
+        `SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE agent_id = ? AND company_id = ? AND date >= ? AND date <= ? AND status = 'approved'`,
+        [a.id, req.user.companyId, startDate, endDate]
+      );
+
+      const carteProExpired = a.carte_pro_expiry && a.carte_pro_expiry < today;
+      const carteProDaysLeft = a.carte_pro_expiry
+        ? Math.round((new Date(a.carte_pro_expiry) - new Date(today)) / 86400000)
+        : null;
+
+      return {
+        ...a,
+        total_hours: totalHours,
+        hours_breakdown: {
+          day: parseFloat(hoursRow.hours_day) || 0,
+          night: parseFloat(hoursRow.hours_night) || 0,
+          sunday: parseFloat(hoursRow.hours_sunday) || 0,
+          sunday_night: parseFloat(hoursRow.hours_sunday_night) || 0,
+          holiday: parseFloat(hoursRow.hours_holiday) || 0,
+          holiday_night: parseFloat(hoursRow.hours_holiday_night) || 0,
+        },
+        absence_days: absenceDays,
+        cp_balance: parseFloat(cpRow.balance) || 0,
+        expenses_total: parseFloat(expRow.total) || 0,
+        carte_pro_expired: carteProExpired,
+        carte_pro_days_left: carteProDaysLeft,
+      };
+    }));
+
+    const settings = await getSettings(req.user.companyId);
+    const doc = generateRHReport(settings, month, results);
+    streamPdf(res, doc, `bilan_rh_${month}.pdf`);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

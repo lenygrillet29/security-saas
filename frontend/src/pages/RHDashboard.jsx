@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Users, Clock, Sun, Wallet, Shield, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Users, Clock, Sun, Wallet, Shield, AlertTriangle, FileDown } from 'lucide-react';
 import { rhApi } from '../api';
 import { ToastProvider, useToast } from '../components/Toast';
+
+const BASE = import.meta.env.VITE_API_URL || '/api';
 
 function monthLabel(ym) {
   const [y, m] = ym.split('-');
@@ -163,6 +165,15 @@ function RHDashboardInner() {
           <h1 className="page-title">Tableau de bord RH</h1>
           <p className="text-slate-400 text-sm mt-1">Vue synthèse par agent — heures, CP, absences, frais</p>
         </div>
+        <button
+          onClick={() => {
+            const token = localStorage.getItem('auth_token');
+            window.open(`${BASE}/pdf/rh-report?month=${ym}&token=${token}`, '_blank');
+          }}
+          className="btn-secondary flex items-center gap-2"
+        >
+          <FileDown className="w-4 h-4" /> Export PDF
+        </button>
       </div>
 
       {/* Sélecteur mois */}

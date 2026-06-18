@@ -590,6 +590,153 @@ function formatDate(dateStr) {
   return `${d}/${m}/${y}`;
 }
 
+// ── Rapport RH mensuel ────────────────────────────────────────────────────────
+function generateRHReport(settings, month, agents) {
+  const doc = createDoc();
+  const W   = doc.page.width - 80; // 40px margin chaque côté
+  const L   = 40;
+
+  // Titre mois
+  const [y, m] = month.split('-');
+  const monthLabel = new Date(Number(y), Number(m) - 1, 1)
+    .toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+
+  drawHeader(doc, settings, 'Bilan RH', monthLabel);
+
+  // ── Totaux globaux ────────────────────────────────────────────────────────
+  const totalH    = agents.reduce((s, a) => s + (parseFloat(a.total_hours) || 0), 0);
+  const totalAbs  = agents.reduce((s, a) => s + (parseFloat(a.absence_days) || 0), 0);
+  const totalExp  = agents.reduce((s, a) => s + (parseFloat(a.expenses_total) || 0), 0);
+  const alerts    = agents.filter(a => a.carte_pro_expired || a.cp_balance < 0);
+
+  const fmtH = (h) => {
+    if (!h || isNaN(h)) return '—';
+    const hh = Math.floor(h);
+    const mm = Math.round((h - hh) * 60);
+    return `${hh}h${mm > 0 ? String(mm).padStart(2, '0') : ''}`;
+  };
+
+  // Bandeaux résumé
+  const kwW = W / 4;
+  const kwY = doc.y;
+  const kws = [
+    { label: 'Agents', value: String(agents.length), color: COLORS.primary },
+    { label: 'Total heures', value: fmtH(totalH), color: COLORS.accent },
+    { label: 'Jours absents', value: `${totalAbs} j`, color: COLORS.sunday },
+    { label: 'Notes de frais', value: `${totalExp.toFixed(0)} €`, color: COLORS.night },
+  ];
+  kws.forEach((kw, i) => {
+    doc.rect(L + i * kwW, kwY, kwW - 6, 44).fill(COLORS.surface);
+    doc.fillColor(kw.color).fontSize(16).font('Helvetica-Bold')
+       .text(kw.value, L + i * kwW + 8, kwY + 6, { width: kwW - 16 });
+    doc.fillColor(COLORS.muted).fontSize(8).font('Helvetica')
+       .text(kw.label, L + i * kwW + 8, kwY + 26, { width: kwW - 16 });
+  });
+  doc.y = kwY + 56;
+
+  // ── Tableau ───────────────────────────────────────────────────────────────
+  drawSection(doc, 'Détail par agent');
+
+  // Colonnes : [label, width, align]
+  const cols = [
+    { label: 'Agent',       w: 130, align: 'left'  },
+    { label: 'Total',       w: 50,  align: 'center' },
+    { label: 'Jour',        w: 45,  align: 'center' },
+    { label: 'Nuit',        w: 45,  align: 'center' },
+    { label: 'Dim/Fér',    w: 50,  align: 'center' },
+    { label: 'Absences',   w: 55,  align: 'center' },
+    { label: 'CP solde',   w: 55,  align: 'center' },
+    { label: 'Frais',      w: 55,  align: 'center' },
+  ];
+
+  // En-tête tableau
+  let x = L;
+  const headerY = doc.y;
+  doc.rect(L, headerY, W, 20).fill('#2D3555');
+  cols.forEach(col => {
+    doc.fillColor(COLORS.muted).fontSize(7.5).font('Helvetica-Bold')
+       .text(col.label, x + 4, headerY + 6, { width: col.w - 8, align: col.align });
+    x += col.w;
+  });
+  doc.y = headerY + 22;
+
+  // Lignes
+  agents.forEach((a, idx) => {
+    if (doc.y > doc.page.height - 80) {
+      doc.addPage();
+      doc.y = 50;
+    }
+    const rowY = doc.y;
+    const rowH = 22;
+    if (idx % 2 === 0) doc.rect(L, rowY, W, rowH).fill('#141824');
+
+    const night   = (parseFloat(a.hours_breakdown?.night) || 0)
+                  + (parseFloat(a.hours_breakdown?.sunday_night) || 0);
+    const special = (parseFloat(a.hours_breakdown?.sunday) || 0)
+                  + (parseFloat(a.hours_breakdown?.holiday) || 0)
+                  + (parseFloat(a.hours_breakdown?.holiday_night) || 0);
+    const cpColor = a.cp_balance < 0 ? '#EF4444' : a.cp_balance < 5 ? '#F59E0B' : COLORS.accent;
+    const alertIcon = a.carte_pro_expired ? ' ⚠' : '';
+
+    const cells = [
+      { val: `${a.last_name} ${a.first_name}${alertIcon}`, color: COLORS.text  },
+      { val: fmtH(a.total_hours),   color: a.total_hours > 0 ? COLORS.primary : COLORS.muted },
+      { val: fmtH(a.hours_breakdown?.day || 0), color: COLORS.sunday },
+      { val: night > 0 ? fmtH(night) : '—',    color: COLORS.night  },
+      { val: special > 0 ? fmtH(special) : '—', color: '#EC4899'    },
+      { val: a.absence_days > 0 ? `${a.absence_days} j` : '—', color: a.absence_days > 0 ? '#F87171' : COLORS.muted },
+      { val: `${parseFloat(a.cp_balance || 0).toFixed(1)} j`, color: cpColor },
+      { val: a.expenses_total > 0 ? `${parseFloat(a.expenses_total).toFixed(0)} €` : '—', color: COLORS.accent },
+    ];
+
+    let cx = L;
+    cells.forEach((cell, ci) => {
+      doc.fillColor(cell.color).fontSize(8).font(ci === 0 ? 'Helvetica-Bold' : 'Helvetica')
+         .text(cell.val, cx + 4, rowY + 7, { width: cols[ci].w - 8, align: cols[ci].align, lineBreak: false });
+      cx += cols[ci].w;
+    });
+    doc.y = rowY + rowH;
+  });
+
+  // Ligne totaux
+  const totY = doc.y + 4;
+  doc.rect(L, totY, W, 22).fill('#1E2942');
+  const totCells = [
+    { val: `TOTAL (${agents.length} agents)`, color: COLORS.text },
+    { val: fmtH(totalH), color: COLORS.primary },
+    { val: '—', color: COLORS.muted },
+    { val: '—', color: COLORS.muted },
+    { val: '—', color: COLORS.muted },
+    { val: `${totalAbs} j`, color: '#F87171' },
+    { val: '—', color: COLORS.muted },
+    { val: `${totalExp.toFixed(0)} €`, color: COLORS.accent },
+  ];
+  let tx = L;
+  totCells.forEach((cell, ci) => {
+    doc.fillColor(cell.color).fontSize(8).font('Helvetica-Bold')
+       .text(cell.val, tx + 4, totY + 7, { width: cols[ci].w - 8, align: cols[ci].align, lineBreak: false });
+    tx += cols[ci].w;
+  });
+  doc.y = totY + 30;
+
+  // ── Alertes ───────────────────────────────────────────────────────────────
+  if (alerts.length > 0) {
+    drawSection(doc, 'Alertes');
+    alerts.forEach(a => {
+      const msgs = [];
+      if (a.carte_pro_expired) msgs.push('Carte pro expirée');
+      if (a.cp_balance < 0) msgs.push(`CP négatif : ${parseFloat(a.cp_balance).toFixed(1)} j`);
+      doc.fillColor('#F87171').fontSize(9).font('Helvetica-Bold')
+         .text(`${a.last_name} ${a.first_name}  `, L, doc.y, { continued: true });
+      doc.fillColor(COLORS.muted).font('Helvetica').text(msgs.join(' · '));
+      doc.moveDown(0.3);
+    });
+  }
+
+  addLegalFooters(doc, settings);
+  return doc;
+}
+
 module.exports = {
   generateAgentPlanning,
   generateSitePlanning,
@@ -597,4 +744,5 @@ module.exports = {
   generateQuote,
   generateInvoice,
   generateAgentBadge,
+  generateRHReport,
 };
