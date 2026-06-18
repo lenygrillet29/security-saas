@@ -914,7 +914,7 @@ function generateWeeklyOverview(settings, startDate, endDate, shifts, agents) {
   // ── Lignes agents ──────────────────────────────────────────────────────────
   agents.forEach((agent, ai) => {
     if (y + ROW_H > doc.page.height - 50) {
-      doc.addPage({ size: 'A4', layout: 'landscape' });
+      doc.addPage();
       y = 40;
     }
     const rowBg = ai % 2 === 0 ? COLORS.surface : '#21253A';

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, Download, Mail, Search, Sun, Moon, FileDown, Printer } from 'lucide-react';
-import { quotesApi, clientsApi, sitesApi, pdfApi, emailApi } from '../api';
+import { useNavigate } from 'react-router-dom';
+import { Plus, Edit2, Trash2, Download, Mail, Search, Sun, Moon, FileDown, Printer, Receipt } from 'lucide-react';
+import { quotesApi, clientsApi, sitesApi, pdfApi, emailApi, invoicesApi } from '../api';
 import Modal from '../components/Modal';
 import Confirm from '../components/Confirm';
 import { ToastProvider, useToast } from '../components/Toast';
@@ -265,6 +266,7 @@ function EmailModal({ quoteId, client, onClose }) {
 
 function QuotesInner() {
   const toast = useToast();
+  const navigate = useNavigate();
   const [quotes, setQuotes] = useState([]);
   const [clients, setClients] = useState([]);
   const [sites, setSites] = useState([]);
@@ -273,6 +275,7 @@ function QuotesInner() {
   const [modal, setModal] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
   const [emailModal, setEmailModal] = useState(null);
+  const [converting, setConverting] = useState(null);
 
   async function load() {
     const [q, c, s] = await Promise.all([quotesApi.list(), clientsApi.list(), sitesApi.list()]);
@@ -294,6 +297,19 @@ function QuotesInner() {
       toast('Devis supprimé');
       load();
     } catch (err) { toast(err.message, 'error'); }
+  }
+
+  async function convertToInvoice(quoteId) {
+    if (!window.confirm('Convertir ce devis en facture ?')) return;
+    setConverting(quoteId);
+    try {
+      await invoicesApi.fromQuote(quoteId);
+      toast('Facture créée avec succès');
+      navigate('/invoices');
+    } catch (err) {
+      toast(err.message, 'error');
+      setConverting(null);
+    }
   }
 
   const filtered = quotes.filter(q =>
@@ -373,6 +389,14 @@ function QuotesInner() {
                     </td>
                     <td className="py-3 px-3">
                       <div className="flex items-center justify-end gap-1">
+                        {quote.status === 'accepted' && (
+                          <button onClick={() => convertToInvoice(quote.id)} disabled={converting === quote.id}
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 text-emerald-400 hover:text-white hover:bg-emerald-600/20 rounded-lg transition-colors text-xs font-medium border border-emerald-600/30 disabled:opacity-50"
+                            title="Convertir en facture">
+                            <Receipt className="w-3.5 h-3.5" />
+                            Facture
+                          </button>
+                        )}
                         <button onClick={() => pdfApi.quote(quote.id)}
                           className="flex items-center gap-1.5 px-2.5 py-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-600/10 rounded-lg transition-colors text-xs font-medium" title="Télécharger PDF">
                           <FileDown className="w-3.5 h-3.5" />
