@@ -263,6 +263,17 @@ export const expensesApi = {
   reject:  (id, reason) => post(`/expenses/${id}/reject`, { reason }),
 };
 
+// Tâches
+export const tasksApi = {
+  list:   (params = {}) => { const q = new URLSearchParams(params).toString(); return get(`/tasks${q ? `?${q}` : ''}`); },
+  stats:  () => get('/tasks/stats'),
+  create: (data) => post('/tasks', data),
+  update: (id, data) => put(`/tasks/${id}`, data),
+  done:   (id) => post(`/tasks/${id}/done`, {}),
+  reopen: (id) => post(`/tasks/${id}/reopen`, {}),
+  delete: (id) => del(`/tasks/${id}`),
+};
+
 // Messagerie interne
 export const messagesApi = {
   threads:      () => get('/messages/threads'),

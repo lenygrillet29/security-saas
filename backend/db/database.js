@@ -443,6 +443,25 @@ async function init() {
     );
   `);
 
+  // ── Tâches / To-do ────────────────────────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS tasks (
+      id              SERIAL PRIMARY KEY,
+      company_id      INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      created_by      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      assigned_user_id  INTEGER REFERENCES users(id)  ON DELETE SET NULL,
+      assigned_agent_id INTEGER REFERENCES agents(id) ON DELETE SET NULL,
+      title           TEXT NOT NULL,
+      description     TEXT,
+      priority        TEXT NOT NULL DEFAULT 'normale',
+      due_date        TEXT,
+      status          TEXT NOT NULL DEFAULT 'a_faire',
+      done_at         TIMESTAMP,
+      done_by         INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   // ── Messagerie interne ────────────────────────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS messages (
