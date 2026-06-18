@@ -3,6 +3,29 @@ const router = express.Router();
 const { db } = require('../db/database');
 const { requireWriter } = require('../middleware/auth');
 const { getBalance } = require('./cp');
+const { sendSystemEmail } = require('../utils/systemEmail');
+const templates = require('../utils/emailTemplates');
+
+const TYPE_LABELS = {
+  conge: 'Congé payé', rtt: 'RTT', maladie: 'Arrêt maladie',
+  sans_solde: 'Sans solde', formation: 'Formation', autre: 'Autre',
+};
+
+async function getCompanyManagers(companyId) {
+  return db.all(
+    `SELECT email, first_name, last_name FROM users
+     WHERE company_id = ? AND active = 1 AND role IN ('admin','gestionnaire') AND email IS NOT NULL`,
+    [companyId]
+  );
+}
+
+async function getAgentEmail(agentId, companyId) {
+  const a = await db.get(
+    'SELECT email, first_name, last_name FROM agents WHERE id = ? AND company_id = ?',
+    [agentId, companyId]
+  );
+  return a;
+}
 
 const ABSENCES_QUERY = `
   SELECT ab.*, a.first_name, a.last_name, a.color as agent_color
@@ -44,7 +67,32 @@ router.post('/', requireWriter, async (req, res) => {
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [req.user.companyId, agent_id, start_date, end_date, type, status || 'approved', notes || null]
     );
-    res.status(201).json(await db.get(ABSENCES_QUERY + ' WHERE ab.id = ?', [result.lastInsertRowid]));
+    const absence = await db.get(ABSENCES_QUERY + ' WHERE ab.id = ?', [result.lastInsertRowid]);
+
+    // Email aux gestionnaires si statut = en attente
+    if ((status || 'approved') === 'pending') {
+      try {
+        const managers = await getCompanyManagers(req.user.companyId);
+        const appUrl = process.env.APP_URL || 'https://securoplan.vercel.app';
+        for (const mgr of managers) {
+          sendSystemEmail({
+            to: mgr.email,
+            subject: `📋 Demande d'absence — ${absence.first_name} ${absence.last_name}`,
+            html: templates.absenceRequest({
+              managerName: mgr.first_name,
+              agentName: `${absence.first_name} ${absence.last_name}`,
+              type: TYPE_LABELS[type] || type,
+              startDate: start_date,
+              endDate: end_date,
+              notes: notes || '',
+              appUrl,
+            }),
+          }).catch(() => {});
+        }
+      } catch {}
+    }
+
+    res.status(201).json(absence);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -108,7 +156,30 @@ router.put('/:id/approve', requireWriter, async (req, res) => {
       }
     } catch {}
 
-    res.json(await db.get(ABSENCES_QUERY + ' WHERE ab.id = ?', [req.params.id]));
+    const updated = await db.get(ABSENCES_QUERY + ' WHERE ab.id = ?', [req.params.id]);
+
+    // Email à l'agent
+    try {
+      const agent = await getAgentEmail(absence.agent_id, req.user.companyId);
+      if (agent?.email) {
+        const appUrl = process.env.APP_URL || 'https://securoplan.vercel.app';
+        sendSystemEmail({
+          to: agent.email,
+          subject: '✅ Votre demande d\'absence a été approuvée',
+          html: templates.absenceDecision({
+            agentName: agent.first_name,
+            approved: true,
+            type: TYPE_LABELS[absence.type] || absence.type,
+            startDate: absence.start_date,
+            endDate: absence.end_date,
+            reason: '',
+            appUrl,
+          }),
+        }).catch(() => {});
+      }
+    } catch {}
+
+    res.json(updated);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -149,7 +220,30 @@ router.put('/:id/reject', requireWriter, async (req, res) => {
       }
     } catch {}
 
-    res.json(await db.get(ABSENCES_QUERY + ' WHERE ab.id = ?', [req.params.id]));
+    const updated = await db.get(ABSENCES_QUERY + ' WHERE ab.id = ?', [req.params.id]);
+
+    // Email à l'agent
+    try {
+      const agent = await getAgentEmail(absence.agent_id, req.user.companyId);
+      if (agent?.email) {
+        const appUrl = process.env.APP_URL || 'https://securoplan.vercel.app';
+        sendSystemEmail({
+          to: agent.email,
+          subject: '❌ Votre demande d\'absence a été refusée',
+          html: templates.absenceDecision({
+            agentName: agent.first_name,
+            approved: false,
+            type: TYPE_LABELS[absence.type] || absence.type,
+            startDate: absence.start_date,
+            endDate: absence.end_date,
+            reason: reason || '',
+            appUrl,
+          }),
+        }).catch(() => {});
+      }
+    } catch {}
+
+    res.json(updated);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

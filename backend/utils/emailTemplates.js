@@ -362,4 +362,48 @@ function invoiceOverdue({ clientName, companyName, invoiceNumber, totalTtc, dueD
   `);
 }
 
-module.exports = { welcome, trialEnding, paymentSucceeded, paymentFailed, cancellationConfirmed, newFeature, contractSignRequest, clientPortalLink, agentPortalLink, passwordReset, shiftOffer, invoiceOverdue };
+// ─── Demande d'absence (pour le gestionnaire) ─────────────────────────────────
+function absenceRequest({ managerName, agentName, type, startDate, endDate, notes, appUrl }) {
+  const fmt = d => d ? new Date(d + 'T12:00:00Z').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : d;
+  return base('Nouvelle demande d\'absence', `
+    <h1 style="color:white;font-size:22px;margin:0 0 6px;">📋 Nouvelle demande d'absence</h1>
+    <p style="color:#94a3b8;margin:0 0 28px;font-size:14px;">Bonjour ${managerName}, une demande est en attente de validation.</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #334155;border-radius:10px;overflow:hidden;margin-bottom:24px;">
+      <tbody>
+        ${row('Agent', agentName)}
+        ${row('Type', type)}
+        ${row('Du', fmt(startDate))}
+        ${row('Au', fmt(endDate))}
+        ${notes ? row('Notes', notes) : ''}
+      </tbody>
+    </table>
+    ${appUrl ? btn('Voir la demande →', `${appUrl}/absences`, '#f59e0b') : ''}
+  `);
+}
+
+// ─── Décision sur une absence (pour l'agent) ──────────────────────────────────
+function absenceDecision({ agentName, approved, type, startDate, endDate, reason, appUrl }) {
+  const fmt = d => d ? new Date(d + 'T12:00:00Z').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : d;
+  const color  = approved ? '#10b981' : '#ef4444';
+  const icon   = approved ? '✅' : '❌';
+  const title  = approved ? 'Absence approuvée' : 'Absence refusée';
+  const msg    = approved
+    ? `Votre demande de ${type} a été <strong style="color:#10b981;">approuvée</strong>.`
+    : `Votre demande de ${type} a été <strong style="color:#ef4444;">refusée</strong>.`;
+  return base(title, `
+    <h1 style="color:white;font-size:22px;margin:0 0 6px;">${icon} ${title}</h1>
+    <p style="color:#94a3b8;margin:0 0 24px;font-size:14px;">Bonjour ${agentName},</p>
+    <p style="color:#e2e8f0;font-size:15px;margin:0 0 24px;">${msg}</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #334155;border-radius:10px;overflow:hidden;margin-bottom:24px;">
+      <tbody>
+        ${row('Type', type)}
+        ${row('Du', fmt(startDate))}
+        ${row('Au', fmt(endDate))}
+        ${reason ? row('Motif du refus', reason, '#f87171') : ''}
+      </tbody>
+    </table>
+    ${appUrl ? btn('Voir mon planning →', `${appUrl}/absences`, color) : ''}
+  `);
+}
+
+module.exports = { welcome, trialEnding, paymentSucceeded, paymentFailed, cancellationConfirmed, newFeature, contractSignRequest, clientPortalLink, agentPortalLink, passwordReset, shiftOffer, invoiceOverdue, absenceRequest, absenceDecision };
