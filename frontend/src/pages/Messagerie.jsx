@@ -58,17 +58,28 @@ function ThreadRow({ t, active, onClick }) {
 
 // ── Modal nouveau fil / groupe ────────────────────────────────────────────────
 function NewModal({ users, agents, onClose, onDone }) {
-  const toast = useToast();
-  const [step, setStep]     = useState('choose'); // choose | agent | group
+  const toast    = useToast();
+  const searchRef = useRef(null);
+  const [step, setStep]                     = useState('search'); // search | group
+  const [searchQ, setSearchQ]               = useState('');
   const [groupName, setGroupName]           = useState('');
   const [groupDesc, setGroupDesc]           = useState('');
   const [agentsCanReply, setAgentsCanReply] = useState(true);
   const [selUsers, setSelUsers]             = useState([]);
   const [selAgents, setSelAgents]           = useState([]);
-  const [searchQ, setSearchQ]               = useState('');
+  const [groupSearchQ, setGroupSearchQ]     = useState('');
+
+  useEffect(() => { searchRef.current?.focus(); }, []);
 
   function toggleUser(id)  { setSelUsers(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]); }
   function toggleAgent(id) { setSelAgents(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]); }
+
+  function highlight(text, query) {
+    if (!query) return text;
+    const idx = text.toLowerCase().indexOf(query.toLowerCase());
+    if (idx === -1) return text;
+    return <>{text.slice(0, idx)}<mark className="bg-blue-500/30 text-blue-200 rounded">{text.slice(idx, idx + query.length)}</mark>{text.slice(idx + query.length)}</>;
+  }
 
   async function createGroup() {
     if (!groupName.trim()) return;
@@ -79,59 +90,23 @@ function NewModal({ users, agents, onClose, onDone }) {
     } catch (e) { toast(e.message, 'error'); }
   }
 
-  const allPeople = [
+  const q = searchQ.toLowerCase();
+  const filteredAgents = agents.filter(a =>
+    !q || `${a.last_name} ${a.first_name}`.toLowerCase().includes(q) || (a.employee_number || '').toLowerCase().includes(q)
+  );
+  const filteredUsers = users.filter(u =>
+    !q || `${u.first_name} ${u.last_name}`.toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q)
+  );
+  const showAll = !q;
+
+  const allGroupPeople = [
     ...users.map(u => ({ id: `u_${u.id}`, rawId: u.id, type: 'user', name: `${u.first_name} ${u.last_name}`, sub: u.role, color: '#64748B' })),
     ...agents.map(a => ({ id: `a_${a.agent_id||a.id}`, rawId: a.agent_id||a.id, type: 'agent', name: `${a.last_name} ${a.first_name}`, sub: a.employee_number, color: a.color })),
-  ].filter(p => p.name.toLowerCase().includes(searchQ.toLowerCase()));
-
-  if (step === 'choose') return (
-    <div className="p-4 space-y-2">
-      <button onClick={() => setStep('agent')}
-        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-dark-700 transition-colors text-left border border-dark-600">
-        <div className="w-9 h-9 rounded-xl bg-blue-500/15 flex items-center justify-center shrink-0">
-          <User className="w-4 h-4 text-blue-400" />
-        </div>
-        <div>
-          <div className="text-white text-sm font-medium">Message à un agent</div>
-          <div className="text-xs text-slate-500">Conversation privée avec un agent</div>
-        </div>
-      </button>
-      <button onClick={() => setStep('group')}
-        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-dark-700 transition-colors text-left border border-dark-600">
-        <div className="w-9 h-9 rounded-xl bg-emerald-500/15 flex items-center justify-center shrink-0">
-          <Users className="w-4 h-4 text-emerald-400" />
-        </div>
-        <div>
-          <div className="text-white text-sm font-medium">Créer un groupe</div>
-          <div className="text-xs text-slate-500">Ex: Équipe événement, Brigade nuit…</div>
-        </div>
-      </button>
-    </div>
-  );
-
-  if (step === 'agent') return (
-    <div className="p-3 space-y-2 max-h-80 overflow-y-auto">
-      <button onClick={() => setStep('choose')} className="text-xs text-slate-500 hover:text-white flex items-center gap-1 mb-2">
-        ← Retour
-      </button>
-      <input className="input text-sm" placeholder="Rechercher un agent…" value={searchQ} onChange={e => setSearchQ(e.target.value)} />
-      {agents.filter(a => `${a.last_name} ${a.first_name}`.toLowerCase().includes(searchQ.toLowerCase())).map(a => (
-        <button key={a.agent_id||a.id}
-          onClick={() => { onClose(); onDone({ thread_type: 'agent', target_id: a.agent_id||a.id, first_name: a.first_name, last_name: a.last_name, color: a.color }); }}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-dark-700 transition-colors text-left">
-          <Avatar firstName={a.first_name} lastName={a.last_name} color={a.color} size="sm" />
-          <div>
-            <div className="text-white text-sm">{a.last_name} {a.first_name}</div>
-            {a.employee_number && <div className="text-xs text-slate-500">{a.employee_number}</div>}
-          </div>
-        </button>
-      ))}
-    </div>
-  );
+  ].filter(p => !groupSearchQ || p.name.toLowerCase().includes(groupSearchQ.toLowerCase()));
 
   if (step === 'group') return (
     <div className="p-4 space-y-3">
-      <button onClick={() => setStep('choose')} className="text-xs text-slate-500 hover:text-white flex items-center gap-1">
+      <button onClick={() => setStep('search')} className="text-xs text-slate-500 hover:text-white flex items-center gap-1">
         ← Retour
       </button>
       <div>
@@ -158,9 +133,9 @@ function NewModal({ users, agents, onClose, onDone }) {
       </button>
       <div>
         <label className="label">Ajouter des membres</label>
-        <input className="input text-sm mb-2" placeholder="Rechercher…" value={searchQ} onChange={e => setSearchQ(e.target.value)} />
-        <div className="space-y-1 max-h-48 overflow-y-auto">
-          {allPeople.map(p => {
+        <input className="input text-sm mb-2" placeholder="Rechercher…" value={groupSearchQ} onChange={e => setGroupSearchQ(e.target.value)} />
+        <div className="space-y-1 max-h-44 overflow-y-auto">
+          {allGroupPeople.map(p => {
             const sel = p.type === 'user' ? selUsers.includes(p.rawId) : selAgents.includes(p.rawId);
             return (
               <button key={p.id} onClick={() => p.type === 'user' ? toggleUser(p.rawId) : toggleAgent(p.rawId)}
@@ -185,6 +160,111 @@ function NewModal({ users, agents, onClose, onDone }) {
         <button onClick={onClose} className="btn-secondary flex-1">Annuler</button>
         <button onClick={createGroup} disabled={!groupName.trim()} className="btn-primary flex-1 disabled:opacity-40">Créer le groupe</button>
       </div>
+    </div>
+  );
+
+  // Étape principale : recherche instantanée
+  return (
+    <div className="flex flex-col">
+      {/* Barre de recherche */}
+      <div className="px-4 pt-4 pb-2">
+        <div className="relative">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <input
+            ref={searchRef}
+            className="input pl-9 text-sm"
+            placeholder="Nom d'un agent ou collaborateur…"
+            value={searchQ}
+            onChange={e => setSearchQ(e.target.value)}
+          />
+          {searchQ && (
+            <button onClick={() => setSearchQ('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="overflow-y-auto max-h-72 pb-2">
+        {/* Bouton créer groupe (toujours visible) */}
+        {!q && (
+          <div className="px-3 pb-1">
+            <button onClick={() => setStep('group')}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-dark-700 transition-colors text-left border border-dark-600 border-dashed">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/15 flex items-center justify-center shrink-0">
+                <Users className="w-4 h-4 text-emerald-400" />
+              </div>
+              <div>
+                <div className="text-emerald-300 text-sm font-medium">Créer un groupe</div>
+                <div className="text-xs text-slate-500">Équipe événement, brigade nuit…</div>
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* Agents filtrés */}
+        {filteredAgents.length > 0 && (
+          <>
+            <p className="text-[10px] text-slate-600 uppercase tracking-wide px-4 pt-3 pb-1">
+              Agents {q && <span className="normal-case text-slate-500">· {filteredAgents.length} résultat{filteredAgents.length > 1 ? 's' : ''}</span>}
+            </p>
+            {(showAll ? filteredAgents.slice(0, 6) : filteredAgents).map(a => (
+              <button key={a.agent_id||a.id}
+                onClick={() => { onClose(); onDone({ thread_type: 'agent', target_id: a.agent_id||a.id, first_name: a.first_name, last_name: a.last_name, color: a.color }); }}
+                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-dark-700 transition-colors text-left">
+                <Avatar firstName={a.first_name} lastName={a.last_name} color={a.color} size="sm" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-white text-sm truncate">{highlight(`${a.last_name} ${a.first_name}`, searchQ)}</div>
+                  {a.employee_number && <div className="text-xs text-slate-500">{highlight(a.employee_number, searchQ)}</div>}
+                </div>
+                <span className="text-[10px] text-slate-600 shrink-0">Agent</span>
+              </button>
+            ))}
+            {showAll && filteredAgents.length > 6 && (
+              <p className="text-xs text-slate-600 px-4 py-1">+{filteredAgents.length - 6} agents — tapez pour filtrer</p>
+            )}
+          </>
+        )}
+
+        {/* Collaborateurs filtrés */}
+        {filteredUsers.length > 0 && (
+          <>
+            <p className="text-[10px] text-slate-600 uppercase tracking-wide px-4 pt-3 pb-1">
+              Collaborateurs {q && <span className="normal-case text-slate-500">· {filteredUsers.length} résultat{filteredUsers.length > 1 ? 's' : ''}</span>}
+            </p>
+            {filteredUsers.map(u => (
+              <button key={u.id}
+                onClick={() => { onClose(); onDone({ thread_type: 'user', target_id: u.id, first_name: u.first_name, last_name: u.last_name, color: '#64748B' }); }}
+                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-dark-700 transition-colors text-left">
+                <Avatar firstName={u.first_name} lastName={u.last_name} color="#64748B" size="sm" icon={User} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-white text-sm truncate">{highlight(`${u.first_name} ${u.last_name}`, searchQ)}</div>
+                  {u.email && <div className="text-xs text-slate-500">{highlight(u.email, searchQ)}</div>}
+                </div>
+                <span className="text-[10px] text-slate-600 shrink-0">Collaborateur</span>
+              </button>
+            ))}
+          </>
+        )}
+
+        {/* Aucun résultat */}
+        {q && filteredAgents.length === 0 && filteredUsers.length === 0 && (
+          <div className="text-center py-8 text-slate-600 text-sm px-4">
+            Aucun résultat pour "<span className="text-slate-400">{searchQ}</span>"
+          </div>
+        )}
+      </div>
+
+      {/* Bouton créer groupe en bas quand on recherche */}
+      {q && (
+        <div className="px-3 py-2 border-t border-dark-600">
+          <button onClick={() => setStep('group')}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-dark-700 transition-colors text-left">
+            <Users className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="text-emerald-300 text-sm">Créer un groupe</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
