@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, Plus, Edit2, Trash2, CheckCircle, RotateCcw, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
+import { AlertTriangle, Plus, Edit2, Trash2, CheckCircle, RotateCcw, ChevronLeft, ChevronRight, Eye, FileDown } from 'lucide-react';
 import { incidentsApi, sitesApi, agentsApi } from '../api';
+
+const BASE = import.meta.env.VITE_API_URL || '/api';
+function downloadIncidentPdf(id) {
+  const token = localStorage.getItem('auth_token');
+  window.open(`${BASE}/pdf/incident/${id}?token=${token}`, '_blank');
+}
 import { useToast } from '../components/Toast';
 
 const TYPES = [
@@ -289,6 +295,9 @@ export default function Incidents() {
                   <button onClick={() => setDetail(inc)} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-dark-600 transition-colors" title="Détail">
                     <Eye className="w-3.5 h-3.5" />
                   </button>
+                  <button onClick={() => downloadIncidentPdf(inc.id)} className="p-1.5 rounded-lg text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 transition-colors" title="Télécharger PDF">
+                    <FileDown className="w-3.5 h-3.5" />
+                  </button>
                   <button onClick={() => { setEditing(inc); setForm({ site_id: inc.site_id || '', agent_id: inc.agent_id || '', date: inc.date, time: inc.time || '', type: inc.type, severity: inc.severity, title: inc.title, description: inc.description || '', actions_taken: inc.actions_taken || '', notes: inc.notes || '' }); }}
                     className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-dark-600 transition-colors">
                     <Edit2 className="w-3.5 h-3.5" />
@@ -354,7 +363,10 @@ export default function Incidents() {
                 <p className="text-slate-400 text-sm">{detail.notes}</p>
               </div>
             )}
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex justify-between items-center gap-2 pt-2">
+              <button onClick={() => downloadIncidentPdf(detail.id)} className="btn-secondary flex items-center gap-2">
+                <FileDown className="w-4 h-4" /> Rapport PDF
+              </button>
               {detail.status !== 'clos'
                 ? <button onClick={() => { doClose(detail.id); setDetail(null); }} className="btn-primary flex items-center gap-2"><CheckCircle className="w-4 h-4" /> Clore l'incident</button>
                 : <button onClick={() => { doReopen(detail.id); setDetail(null); }} className="btn-secondary flex items-center gap-2"><RotateCcw className="w-4 h-4" /> Réouvrir</button>

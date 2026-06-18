@@ -9,6 +9,7 @@ const {
   generateInvoice,
   generateAgentBadge,
   generateRHReport,
+  generateIncidentReport,
 } = require('../utils/pdfGenerator');
 
 async function getSettings(companyId) {
@@ -529,6 +530,26 @@ router.get('/vacation-report/:id', async (req, res) => {
     }
 
     streamPdf(res, doc, `rapport_vacation_${report.agent_last}_${report.report_date}.pdf`);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /pdf/incident/:id
+router.get('/incident/:id', async (req, res) => {
+  try {
+    const incident = await db.get(`
+      SELECT i.*,
+        s.name AS site_name, c.name AS client_name,
+        a.first_name AS agent_first, a.last_name AS agent_last
+      FROM incidents i
+      LEFT JOIN sites   s ON i.site_id   = s.id
+      LEFT JOIN clients c ON s.client_id = c.id
+      LEFT JOIN agents  a ON i.agent_id  = a.id
+      WHERE i.id = ? AND i.company_id = ?
+    `, [req.params.id, req.user.companyId]);
+    if (!incident) return res.status(404).json({ error: 'Incident non trouvé' });
+    const settings = await getSettings(req.user.companyId);
+    const doc = generateIncidentReport(settings, incident);
+    streamPdf(res, doc, `incident_${incident.id}_${incident.date || 'rapport'}.pdf`);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

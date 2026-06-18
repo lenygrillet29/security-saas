@@ -590,6 +590,113 @@ function formatDate(dateStr) {
   return `${d}/${m}/${y}`;
 }
 
+// ── Rapport d'incident ────────────────────────────────────────────────────────
+function generateIncidentReport(settings, incident) {
+  const doc = createDoc();
+  const W   = doc.page.width - 80;
+  const L   = 40;
+
+  const SEV_COLORS = {
+    critique: '#EF4444',
+    majeur:   '#F97316',
+    modere:   '#F59E0B',
+    mineur:   '#94A3B8',
+  };
+  const SEV_LABELS = { critique: 'CRITIQUE', majeur: 'MAJEUR', modere: 'MODÉRÉ', mineur: 'MINEUR' };
+  const TYPE_LABELS = { intrusion: 'Intrusion', vol: 'Vol', vandalisme: 'Vandalisme', accident: 'Accident', incendie: 'Incendie', agression: 'Agression', technique: 'Défaillance technique', autre: 'Autre' };
+
+  const sevColor = SEV_COLORS[incident.severity] || COLORS.muted;
+  const sevLabel = SEV_LABELS[incident.severity] || incident.severity;
+  const typeLabel = TYPE_LABELS[incident.type] || incident.type;
+  const statusLabel = incident.status === 'clos' ? 'CLOS' : 'OUVERT';
+
+  drawHeader(doc, settings, "Rapport d'incident", `N° ${incident.id} — ${incident.date || ''}`);
+
+  // Badge gravité
+  const badgeY = doc.y;
+  doc.rect(L, badgeY, 120, 28).fill(sevColor + '22');
+  doc.rect(L, badgeY, 4, 28).fill(sevColor);
+  doc.fillColor(sevColor).fontSize(11).font('Helvetica-Bold')
+     .text(sevLabel, L + 12, badgeY + 8, { width: 108 });
+
+  doc.rect(L + 130, badgeY, 100, 28).fill('#1A1D2E');
+  doc.fillColor(COLORS.muted).fontSize(9).font('Helvetica')
+     .text('TYPE  ', L + 142, badgeY + 5, { continued: true });
+  doc.fillColor(COLORS.text).font('Helvetica-Bold').text(typeLabel);
+  doc.fillColor(COLORS.muted).fontSize(9).font('Helvetica')
+     .text('STATUT  ', L + 142, badgeY + 16, { continued: true });
+  doc.fillColor(incident.status === 'clos' ? COLORS.accent : COLORS.sunday)
+     .font('Helvetica-Bold').text(statusLabel);
+
+  doc.y = badgeY + 38;
+
+  // Infos générales
+  drawSection(doc, 'Informations générales');
+  const infoFields = [
+    ['Date & heure', `${incident.date || '—'}${incident.time ? ' à ' + incident.time : ''}`],
+    ['Site',         incident.site_name  || '—'],
+    ['Client',       incident.client_name || '—'],
+    ['Agent',        incident.agent_first ? `${incident.agent_last} ${incident.agent_first}` : '—'],
+  ];
+  const colW = (W - 20) / 2;
+  infoFields.forEach(([label, val], i) => {
+    const x  = L + (i % 2) * (colW + 20);
+    const y  = doc.y + (i % 2 === 0 && i > 0 ? 0 : 0);
+    if (i % 2 === 0 && i > 0) doc.moveDown(0.1);
+    const rowY = doc.y;
+    doc.fillColor(COLORS.muted).fontSize(8).font('Helvetica').text(label, x, rowY);
+    doc.fillColor(COLORS.text).fontSize(10).font('Helvetica-Bold').text(val, x, rowY + 11, { width: colW });
+    if (i % 2 === 1) doc.moveDown(1.5);
+  });
+  doc.moveDown(0.5);
+
+  // Titre de l'incident
+  drawSection(doc, "Intitulé de l'incident");
+  doc.fillColor(COLORS.text).fontSize(13).font('Helvetica-Bold').text(incident.title || '—', L, doc.y, { width: W });
+  doc.moveDown(1);
+
+  // Description
+  if (incident.description) {
+    drawSection(doc, 'Description des faits');
+    doc.fillColor(COLORS.text).fontSize(10).font('Helvetica')
+       .text(incident.description, L, doc.y, { width: W, lineGap: 3 });
+    doc.moveDown(1);
+  }
+
+  // Mesures prises
+  if (incident.actions_taken) {
+    drawSection(doc, 'Mesures prises / Actions engagées');
+    doc.fillColor(COLORS.text).fontSize(10).font('Helvetica')
+       .text(incident.actions_taken, L, doc.y, { width: W, lineGap: 3 });
+    doc.moveDown(1);
+  }
+
+  // Notes internes
+  if (incident.notes) {
+    drawSection(doc, 'Notes internes');
+    doc.fillColor(COLORS.muted).fontSize(9).font('Helvetica').italic
+       .text(incident.notes, L, doc.y, { width: W, lineGap: 3 });
+    doc.moveDown(1);
+  }
+
+  // Zone signature
+  if (doc.y > doc.page.height - 120) doc.addPage();
+  const sigY = Math.max(doc.y + 20, doc.page.height - 140);
+  doc.rect(L, sigY, W, 80).fill('#1A1D2E');
+  const halfW = (W - 20) / 2;
+  doc.rect(L + 10, sigY + 40, halfW, 24).fill('#0F1117');
+  doc.rect(L + 20 + halfW, sigY + 40, halfW, 24).fill('#0F1117');
+  doc.fillColor(COLORS.muted).fontSize(8).font('Helvetica')
+     .text("Signature de l'agent", L + 10, sigY + 8, { width: halfW, align: 'center' })
+     .text("Signature du responsable", L + 20 + halfW, sigY + 8, { width: halfW, align: 'center' });
+  doc.fillColor('#475569').fontSize(7)
+     .text('Date : _______________', L + 10, sigY + 68, { width: halfW, align: 'center' })
+     .text('Date : _______________', L + 20 + halfW, sigY + 68, { width: halfW, align: 'center' });
+
+  addLegalFooters(doc, settings);
+  return doc;
+}
+
 // ── Rapport RH mensuel ────────────────────────────────────────────────────────
 function generateRHReport(settings, month, agents) {
   const doc = createDoc();
@@ -745,4 +852,5 @@ module.exports = {
   generateInvoice,
   generateAgentBadge,
   generateRHReport,
+  generateIncidentReport,
 };
