@@ -173,6 +173,11 @@ export const pdfApi = {
     const token = localStorage.getItem('auth_token');
     window.open(`${BASE}/pdf/recap/agent/${agentId}?month=${month}&token=${token}`, '_blank');
   },
+  weeklyOverview: (params) => {
+    const token = localStorage.getItem('auth_token');
+    const q = new URLSearchParams({ ...params, token }).toString();
+    window.open(`${BASE}/pdf/planning/week?${q}`, '_blank');
+  },
 };
 
 // Email

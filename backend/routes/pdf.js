@@ -10,6 +10,7 @@ const {
   generateAgentBadge,
   generateRHReport,
   generateIncidentReport,
+  generateWeeklyOverview,
 } = require('../utils/pdfGenerator');
 
 async function getSettings(companyId) {
@@ -635,6 +636,34 @@ router.get('/rh-report', async (req, res) => {
     const settings = await getSettings(req.user.companyId);
     const doc = generateRHReport(settings, month, results);
     streamPdf(res, doc, `bilan_rh_${month}.pdf`);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /pdf/planning/week?start_date=&end_date=
+router.get('/planning/week', async (req, res) => {
+  try {
+    const { start_date, end_date } = req.query;
+    if (!start_date || !end_date) return res.status(400).json({ error: 'start_date et end_date requis' });
+
+    const agents = await db.all(
+      `SELECT id, first_name, last_name, color, employee_number
+       FROM agents WHERE company_id = ? AND active = 1 ORDER BY last_name, first_name`,
+      [req.user.companyId]
+    );
+
+    const shifts = await db.all(
+      `SELECT sh.*, s.name AS site_name
+       FROM shifts sh
+       LEFT JOIN sites s ON sh.site_id = s.id
+       WHERE sh.company_id = ? AND sh.date >= ? AND sh.date <= ?
+       ORDER BY sh.date, sh.start_time`,
+      [req.user.companyId, start_date, end_date]
+    );
+
+    const settings = await getSettings(req.user.companyId);
+    const doc = generateWeeklyOverview(settings, start_date, end_date, shifts, agents);
+    const weekLabel = start_date.replace(/-/g, '');
+    streamPdf(res, doc, `tableau_service_${weekLabel}.pdf`);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

@@ -844,6 +844,132 @@ function generateRHReport(settings, month, agents) {
   return doc;
 }
 
+// ── Tableau de service hebdomadaire (tous agents, format paysage) ─────────────
+function generateWeeklyOverview(settings, startDate, endDate, shifts, agents) {
+  const doc = new PDFDocument({
+    size: 'A4', layout: 'landscape',
+    margins: { top: 40, bottom: 40, left: 30, right: 30 },
+    bufferPages: true,
+    info: { Creator: 'SecuroPlan', Producer: 'SecuroPlan' },
+  });
+
+  const W = doc.page.width - 60; // 841 - 60 = 781
+
+  // ── En-tête ────────────────────────────────────────────────────────────────
+  doc.rect(0, 0, doc.page.width, 50).fill(COLORS.primary);
+  doc.fillColor('#FFFFFF').fontSize(14).font('Helvetica-Bold')
+    .text('TABLEAU DE SERVICE', 30, 14, { align: 'left', lineBreak: false });
+  doc.fontSize(9).font('Helvetica')
+    .text(`${formatDate(startDate)} — ${formatDate(endDate)}`, 30, 32, { lineBreak: false });
+
+  const company = settings?.company_name || 'SecuroPlan';
+  doc.fillColor('#FFFFFF').fontSize(9).font('Helvetica-Bold')
+    .text(company, 0, 20, { width: doc.page.width - 30, align: 'right', lineBreak: false });
+
+  // ── Construction calendrier ────────────────────────────────────────────────
+  const DAY_FR = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+  const start = new Date(startDate + 'T00:00:00');
+  const end   = new Date(endDate   + 'T00:00:00');
+  const days = [];
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    days.push(new Date(d));
+  }
+
+  // Colonnes
+  const AGENT_W = 110;
+  const GAP = 4;
+  const dayW = Math.floor((W - AGENT_W - GAP * days.length) / days.length);
+  const ROW_H = 38;
+  const HEADER_H = 28;
+
+  // Indexer shifts par agent + date
+  const byAgentDate = {};
+  shifts.forEach(s => {
+    if (!s.agent_id) return;
+    const key = `${s.agent_id}_${s.date}`;
+    if (!byAgentDate[key]) byAgentDate[key] = [];
+    byAgentDate[key].push(s);
+  });
+
+  let y = 60;
+
+  // ── En-tête colonnes jours ─────────────────────────────────────────────────
+  doc.rect(30, y, AGENT_W, HEADER_H).fill('#21253A');
+  doc.fillColor(COLORS.muted).fontSize(7).font('Helvetica-Bold')
+    .text('AGENT', 30, y + 10, { width: AGENT_W, align: 'center', lineBreak: false });
+
+  days.forEach((d, i) => {
+    const x = 30 + AGENT_W + GAP + i * (dayW + GAP);
+    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+    doc.rect(x, y, dayW, HEADER_H).fill(isWeekend ? '#2D2040' : '#21253A');
+    doc.fillColor(isWeekend ? COLORS.sunday : COLORS.text).fontSize(7).font('Helvetica-Bold')
+      .text(DAY_FR[d.getDay()], x, y + 4, { width: dayW, align: 'center', lineBreak: false });
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    doc.fillColor(COLORS.muted).fontSize(6).font('Helvetica')
+      .text(`${dd}/${mm}`, x, y + 15, { width: dayW, align: 'center', lineBreak: false });
+  });
+  y += HEADER_H;
+
+  // ── Lignes agents ──────────────────────────────────────────────────────────
+  agents.forEach((agent, ai) => {
+    if (y + ROW_H > doc.page.height - 50) {
+      doc.addPage({ size: 'A4', layout: 'landscape' });
+      y = 40;
+    }
+    const rowBg = ai % 2 === 0 ? COLORS.surface : '#21253A';
+
+    // Cellule agent
+    doc.rect(30, y, AGENT_W, ROW_H).fill(rowBg);
+    doc.fillColor(COLORS.text).fontSize(7.5).font('Helvetica-Bold')
+      .text(`${agent.first_name} ${agent.last_name}`, 33, y + 6, { width: AGENT_W - 6, lineBreak: false, ellipsis: true });
+    if (agent.employee_number) {
+      doc.fillColor(COLORS.muted).fontSize(6).font('Helvetica')
+        .text(`N° ${agent.employee_number}`, 33, y + 17, { width: AGENT_W - 6, lineBreak: false });
+    }
+
+    // Cellules jours
+    days.forEach((d, i) => {
+      const x = 30 + AGENT_W + GAP + i * (dayW + GAP);
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+      const dateStr = d.toISOString().slice(0, 10);
+      const dayShifts = byAgentDate[`${agent.id}_${dateStr}`] || [];
+
+      const cellBg = isWeekend ? (rowBg === COLORS.surface ? '#1E1830' : '#241C38') : rowBg;
+      doc.rect(x, y, dayW, ROW_H).fill(cellBg);
+
+      if (dayShifts.length > 0) {
+        const s = dayShifts[0];
+        const hasNight = s.hours_night > 0;
+        doc.fillColor(hasNight ? COLORS.night : COLORS.accent).fontSize(7).font('Helvetica-Bold')
+          .text(`${s.start_time}–${s.end_time}`, x + 2, y + 5, { width: dayW - 4, align: 'center', lineBreak: false });
+        const siteName = (s.site_name || '').slice(0, 14);
+        doc.fillColor(COLORS.muted).fontSize(5.5).font('Helvetica')
+          .text(siteName, x + 2, y + 16, { width: dayW - 4, align: 'center', lineBreak: false });
+        if (dayShifts.length > 1) {
+          doc.fillColor(COLORS.sunday).fontSize(5.5).font('Helvetica-Bold')
+            .text(`+${dayShifts.length - 1}`, x + 2, y + 26, { width: dayW - 4, align: 'center', lineBreak: false });
+        }
+      }
+    });
+
+    // Séparateur horizontal
+    doc.rect(30, y + ROW_H - 1, AGENT_W + days.length * (dayW + GAP), 1).fill(COLORS.border);
+    y += ROW_H;
+  });
+
+  // ── Légende ────────────────────────────────────────────────────────────────
+  y += 8;
+  if (y < doc.page.height - 40) {
+    doc.fillColor(COLORS.muted).fontSize(6.5).font('Helvetica')
+      .text('● Vert = vacation de jour  ● Violet = vacation de nuit  ● +n = plusieurs vacations ce jour',
+        30, y, { lineBreak: false });
+  }
+
+  addLegalFooters(doc, settings);
+  return doc;
+}
+
 module.exports = {
   generateAgentPlanning,
   generateSitePlanning,
@@ -853,4 +979,5 @@ module.exports = {
   generateAgentBadge,
   generateRHReport,
   generateIncidentReport,
+  generateWeeklyOverview,
 };

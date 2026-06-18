@@ -543,6 +543,30 @@ function ExportModal({ onClose, agents, sites }) {
           </button>
         </div>
 
+        {/* Tableau de service global */}
+        <div className="bg-violet-600/10 border border-violet-600/30 rounded-lg p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <Download className="w-4 h-4 text-violet-400" />
+            <span className="text-sm font-medium text-violet-300">Tableau de service complet</span>
+          </div>
+          <p className="text-xs text-slate-400 mb-3">PDF paysage avec <strong className="text-white">tous les agents</strong> sur la période sélectionnée, idéal à afficher ou imprimer.</p>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className="label">Date début</label>
+              <input type="date" className="input" value={startDate} onChange={e => setStartDate(e.target.value)} />
+            </div>
+            <div>
+              <label className="label">Date fin</label>
+              <input type="date" className="input" value={endDate} onChange={e => setEndDate(e.target.value)} />
+            </div>
+          </div>
+          <button className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold bg-violet-600 hover:bg-violet-500 text-white transition-colors"
+            onClick={() => { pdfApi.weeklyOverview({ start_date: startDate, end_date: endDate }); onClose(); }}>
+            <Download className="w-4 h-4" />
+            Télécharger tableau de service
+          </button>
+        </div>
+
         <div className="border-t border-dark-600 pt-4">
           <p className="text-xs text-slate-500 mb-3">Ou exporter / envoyer un planning individuel :</p>
           <div>
