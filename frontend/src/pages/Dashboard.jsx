@@ -4,8 +4,9 @@ import {
   Users, Building2, MapPin, Clock, Euro, BarChart3, Star,
   AlertTriangle, CheckCircle, LogIn, LogOut, Calendar,
   Bell, FileText, ChevronRight, Loader2, Shield,
+  Siren, CheckSquare, Circle, FolderOpen, GraduationCap, Package,
 } from 'lucide-react';
-import { agentsApi, clientsApi, sitesApi, shiftsApi, invoicesApi, shiftOffersApi } from '../api';
+import { agentsApi, clientsApi, sitesApi, shiftsApi, invoicesApi, shiftOffersApi, get } from '../api';
 import { TrendingUp } from 'lucide-react';
 
 const fmt = n => n >= 1000 ? `${(n/1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(Math.round(n));
@@ -171,6 +172,9 @@ export default function Dashboard() {
   const [pendingOffers, setPendingOffers] = useState([]);
   const [unpaidInvoices, setUnpaidInvoices] = useState([]);
   const [carteProAlerts, setCarteProAlerts] = useState([]);
+  const [todayTasks, setTodayTasks]         = useState([]);
+  const [recentIncidents, setRecentIncidents] = useState([]);
+  const [notifData, setNotifData]           = useState({ count: 0, items: [] });
 
   const today      = new Date();
   const todayStr   = format(today, 'yyyy-MM-dd');
@@ -198,7 +202,10 @@ export default function Dashboard() {
       agentsApi.carteProAlerts(),
       invoicesApi.statsCA().catch(() => null),
       shiftsApi.overtime(4).catch(() => []),
-    ]).then(([a, c, s, ws, ms, rev, tc, ts, wsh, offers, invoices, cpa, ca, ot]) => {
+      get(`/tasks?due=today&status=a_faire`).catch(() => []),
+      get(`/incidents?status=ouvert`).catch(() => ({ items: [] })),
+      get('/notifications').catch(() => ({ count: 0, items: [] })),
+    ]).then(([a, c, s, ws, ms, rev, tc, ts, wsh, offers, invoices, cpa, ca, ot, tasks, incidents, notifs]) => {
       setAgents(a); setClients(c); setSites(s);
       setWeekStats(ws); setMonthStats(ms);
       setRevenue(Array.isArray(rev) ? rev : []);
@@ -214,6 +221,10 @@ export default function Dashboard() {
       setCarteProAlerts(Array.isArray(cpa) ? cpa : []);
       if (ca) setCaStats(ca);
       setOvertime(Array.isArray(ot) ? ot : []);
+      setTodayTasks(Array.isArray(tasks) ? tasks : []);
+      const incList = Array.isArray(incidents) ? incidents : (incidents?.items || []);
+      setRecentIncidents(incList.slice(0, 5));
+      setNotifData(notifs || { count: 0, items: [] });
     }).finally(() => setLoading(false));
   }, []);
 
@@ -246,7 +257,16 @@ export default function Dashboard() {
       </div>
 
       {/* ── Alertes opérationnelles ── */}
-      {(unassignedShifts.length > 0 || pendingOffers.length > 0 || unpaidInvoices.length > 0 || carteProAlerts.length > 0 || overtime.length > 0) && (
+      {(() => {
+        const criticalIncidents = notifData.items?.filter(i => i.category === 'incidents' && i.level === 'critique') || [];
+        const expiredDocs       = notifData.items?.filter(i => i.category === 'documents' && i.level === 'critique') || [];
+        const expiredTrainings  = notifData.items?.filter(i => i.category === 'formations') || [];
+        const overdueEquip      = notifData.items?.filter(i => i.category === 'equipements') || [];
+        const hasAny = unassignedShifts.length || pendingOffers.length || unpaidInvoices.length ||
+          carteProAlerts.length || overtime.length || criticalIncidents.length ||
+          expiredDocs.length || expiredTrainings.length || overdueEquip.length;
+        if (!hasAny) return null;
+        return (
         <section className="space-y-2">
           <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Alertes</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -302,9 +322,22 @@ export default function Dashboard() {
                 onClick={() => navigate('/agents')}
               />
             )}
+            <AlertCard icon={Siren} iconColor="text-red-400" bg="bg-red-600/10" border="border-red-600/30"
+              title="Incidents critiques ouverts" count={criticalIncidents.length}
+              sub="nécessitent une clôture urgente" onClick={() => navigate('/incidents')} />
+            <AlertCard icon={FolderOpen} iconColor="text-rose-400" bg="bg-rose-600/10" border="border-rose-600/30"
+              title="Documents expirés" count={expiredDocs.length}
+              sub="agents avec document(s) expiré(s)" onClick={() => navigate('/documents')} />
+            <AlertCard icon={GraduationCap} iconColor="text-violet-400" bg="bg-violet-600/10" border="border-violet-600/30"
+              title="Formations à renouveler" count={expiredTrainings.length}
+              sub="expirent dans moins de 60 jours" onClick={() => navigate('/formations')} />
+            <AlertCard icon={Package} iconColor="text-cyan-400" bg="bg-cyan-600/10" border="border-cyan-600/30"
+              title="Équipements non rendus" count={overdueEquip.length}
+              sub="dépassent la date de retour" onClick={() => navigate('/equipements')} />
           </div>
         </section>
-      )}
+        );
+      })()}
 
       {/* ── KPIs ── */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
@@ -355,6 +388,72 @@ export default function Dashboard() {
           </div>
         )}
       </section>
+
+      {/* ── Tâches du jour + Incidents récents ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Tâches du jour */}
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-semibold text-white flex items-center gap-2">
+              <CheckSquare className="w-4 h-4 text-blue-400" />
+              Tâches du jour
+            </h2>
+            <button onClick={() => navigate('/taches')} className="text-xs text-slate-500 hover:text-blue-400 transition-colors flex items-center gap-1">
+              Voir tout <ChevronRight className="w-3 h-3" />
+            </button>
+          </div>
+          <div className="card p-0 overflow-hidden">
+            {todayTasks.length === 0 ? (
+              <div className="flex items-center gap-3 px-5 py-6 text-slate-600">
+                <CheckCircle className="w-5 h-5 text-emerald-600" />
+                <span className="text-sm">Aucune tâche pour aujourd'hui</span>
+              </div>
+            ) : todayTasks.map(t => {
+              const priorityColor = t.priority === 'urgente' ? 'bg-red-500' : t.priority === 'haute' ? 'bg-orange-400' : t.priority === 'normale' ? 'bg-blue-500' : 'bg-slate-500';
+              return (
+                <div key={t.id} className="flex items-center gap-3 px-4 py-3 border-b border-dark-600 last:border-0">
+                  <div className={`w-2 h-2 rounded-full shrink-0 ${priorityColor}`} />
+                  <span className="text-sm text-slate-200 flex-1 truncate">{t.title}</span>
+                  {t.priority === 'urgente' && <span className="text-[10px] text-red-400 font-semibold shrink-0">URGENT</span>}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Incidents récents */}
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-semibold text-white flex items-center gap-2">
+              <Siren className="w-4 h-4 text-orange-400" />
+              Incidents ouverts récents
+            </h2>
+            <button onClick={() => navigate('/incidents')} className="text-xs text-slate-500 hover:text-blue-400 transition-colors flex items-center gap-1">
+              Voir tout <ChevronRight className="w-3 h-3" />
+            </button>
+          </div>
+          <div className="card p-0 overflow-hidden">
+            {recentIncidents.length === 0 ? (
+              <div className="flex items-center gap-3 px-5 py-6 text-slate-600">
+                <CheckCircle className="w-5 h-5 text-emerald-600" />
+                <span className="text-sm">Aucun incident ouvert</span>
+              </div>
+            ) : recentIncidents.map(inc => {
+              const sevColor = inc.severity === 'critique' ? 'bg-red-500' : inc.severity === 'majeur' ? 'bg-orange-500' : inc.severity === 'modere' ? 'bg-amber-400' : 'bg-slate-500';
+              return (
+                <div key={inc.id} className="flex items-center gap-3 px-4 py-3 border-b border-dark-600 last:border-0">
+                  <div className={`w-2 h-2 rounded-full shrink-0 ${sevColor}`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-slate-200 truncate">{inc.title}</div>
+                    <div className="text-xs text-slate-500">{inc.site_name || ''} · {inc.incident_date}</div>
+                  </div>
+                  <span className="text-[10px] text-slate-500 shrink-0 capitalize">{inc.severity}</span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      </div>
 
       {/* ── CA factures ── */}
       {caStats && (
