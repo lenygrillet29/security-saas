@@ -57,7 +57,7 @@ function ThreadRow({ t, active, onClick }) {
 }
 
 // ── Modal nouveau fil / groupe ────────────────────────────────────────────────
-function NewModal({ users, agents, onClose, onDone }) {
+function NewModal({ onClose, onDone }) {
   const toast     = useToast();
   const searchRef = useRef(null);
   const [step, setStep]                     = useState('search');
@@ -68,8 +68,15 @@ function NewModal({ users, agents, onClose, onDone }) {
   const [selUsers, setSelUsers]             = useState([]);
   const [selAgents, setSelAgents]           = useState([]);
   const [groupSearchQ, setGroupSearchQ]     = useState('');
+  const [agents, setAgents]                 = useState([]);
+  const [users, setUsers]                   = useState([]);
 
-  useEffect(() => { searchRef.current?.focus(); }, []);
+  useEffect(() => {
+    searchRef.current?.focus();
+    Promise.all([agentsApi.list(true), messagesApi.users()])
+      .then(([ag, us]) => { setAgents(ag || []); setUsers(us || []); })
+      .catch(() => {});
+  }, []);
 
   function toggleUser(id)  { setSelUsers(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]); }
   function toggleAgent(id) { setSelAgents(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]); }
@@ -585,7 +592,6 @@ export default function Messagerie() {
             </div>
             <div className="overflow-y-auto">
               <NewModal
-                users={collab} agents={allAgents}
                 onClose={() => setNewModal(false)}
                 onDone={(t) => { loadThreads(); if (t) openThread(t); }}
               />
