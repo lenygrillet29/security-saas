@@ -8,29 +8,29 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
 const NAV = [
-  { to: '/dashboard', icon: LayoutDashboard, label: 'Tableau de bord' },
-  { to: '/planning', icon: Calendar, label: 'Planning' },
-  { to: '/agents', icon: Users, label: 'Agents' },
-  { to: '/clients', icon: Building2, label: 'Clients' },
-  { to: '/sites', icon: MapPin, label: 'Sites' },
-  { to: '/recap-heures', icon: Clock, label: 'Récap heures' },
-  { to: '/absences',  icon: ClipboardList, label: 'Absences / Congés', dynamicBadge: true },
-  { to: '/quotes',    icon: FileText,      label: 'Devis' },
-  { to: '/contracts', icon: ScrollText, label: 'Contrats' },
-  { to: '/invoices',  icon: Receipt,   label: 'Factures' },
-  { to: '/expenses',  icon: Wallet,    label: 'Notes de frais' },
-  { to: '/conges',    icon: Sun,       label: 'Congés payés' },
-  { to: '/rh',          icon: BarChart3, label: 'Tableau RH' },
-  { to: '/equipements', icon: Package,       label: 'Équipements' },
-  { to: '/formations',  icon: GraduationCap, label: 'Formations' },
-  { to: '/incidents',   icon: Siren,       label: 'Incidents' },
-  { to: '/documents',   icon: FolderOpen,    label: 'Documents' },
-  { to: '/messagerie',     icon: MessageSquare, label: 'Messagerie',     unreadBadge: true },
-  { to: '/taches',         icon: CheckSquare,   label: 'Tâches' },
-  { to: '/notifications',  icon: Bell,          label: 'Notifications',  notifBadge: true },
-  { to: '/audit',      icon: Activity,    label: 'Journal d\'audit' },
-  { to: '/simulation', icon: TrendingUp,  label: 'Simulation marge' },
-  { to: '/chiffrage',  icon: Calculator,  label: 'Chiffrage', badge: 'Pro' },
+  { to: '/dashboard',     icon: LayoutDashboard, label: 'Tableau de bord' },
+  { to: '/planning',      icon: Calendar,        label: 'Planning' },
+  { to: '/agents',        icon: Users,           label: 'Agents' },
+  { to: '/clients',       icon: Building2,       label: 'Clients' },
+  { to: '/sites',         icon: MapPin,          label: 'Sites' },
+  { to: '/recap-heures',  icon: Clock,           label: 'Récap heures' },
+  { to: '/absences',      icon: ClipboardList,   label: 'Absences / Congés', notifCategory: 'absences' },
+  { to: '/quotes',        icon: FileText,        label: 'Devis' },
+  { to: '/contracts',     icon: ScrollText,      label: 'Contrats' },
+  { to: '/invoices',      icon: Receipt,         label: 'Factures' },
+  { to: '/expenses',      icon: Wallet,          label: 'Notes de frais' },
+  { to: '/conges',        icon: Sun,             label: 'Congés payés' },
+  { to: '/rh',            icon: BarChart3,       label: 'Tableau RH' },
+  { to: '/equipements',   icon: Package,         label: 'Équipements',   notifCategory: 'equipements' },
+  { to: '/formations',    icon: GraduationCap,   label: 'Formations',    notifCategory: 'formations' },
+  { to: '/incidents',     icon: Siren,           label: 'Incidents',     notifCategory: 'incidents' },
+  { to: '/documents',     icon: FolderOpen,      label: 'Documents',     notifCategory: 'documents' },
+  { to: '/messagerie',    icon: MessageSquare,   label: 'Messagerie',    unreadBadge: true },
+  { to: '/taches',        icon: CheckSquare,     label: 'Tâches',        notifCategory: 'taches' },
+  { to: '/notifications', icon: Bell,            label: 'Notifications', notifTotal: true },
+  { to: '/audit',         icon: Activity,        label: "Journal d'audit" },
+  { to: '/simulation',    icon: TrendingUp,      label: 'Simulation marge' },
+  { to: '/chiffrage',     icon: Calculator,      label: 'Chiffrage',     badge: 'Pro' },
 ];
 
 const ROLE_LABELS = {
@@ -45,21 +45,57 @@ export default function Sidebar() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [installed, setInstalled] = useState(false);
-  const [pendingAbsences, setPendingAbsences] = useState(0);
-  const [unreadMessages, setUnreadMessages]   = useState(0);
-  const [notifCount, setNotifCount]           = useState(0);
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const [catCounts, setCatCounts]           = useState({});
+  const [totalNotif, setTotalNotif]         = useState(0);
 
   useEffect(() => {
     const token = localStorage.getItem('auth_token');
     if (!token) return;
     const api = import.meta.env.VITE_API_URL || '/api';
     const headers = { Authorization: `Bearer ${token}` };
-    fetch(`${api}/absences?status=pending`, { headers })
-      .then(r => r.json()).then(data => { if (Array.isArray(data)) setPendingAbsences(data.length); }).catch(() => {});
+
+    // Messages non lus
     fetch(`${api}/messages/unread-count`, { headers })
-      .then(r => r.json()).then(data => { setUnreadMessages(data.count || 0); }).catch(() => {});
-    fetch(`${api}/notifications`, { headers })
-      .then(r => r.json()).then(data => { setNotifCount(data.count || 0); }).catch(() => {});
+      .then(r => r.json()).then(d => setUnreadMessages(d.count || 0)).catch(() => {});
+
+    // Notifications par catégorie + push browser
+    async function loadNotifs() {
+      try {
+        const res = await fetch(`${api}/notifications`, { headers });
+        const data = await res.json();
+        const items = data.items || [];
+        const total = data.count || 0;
+        setTotalNotif(total);
+
+        // Compter par catégorie
+        const counts = {};
+        items.forEach(item => { counts[item.category] = (counts[item.category] || 0) + 1; });
+        setCatCounts(counts);
+
+        // Push browser : déclencher si nouvelles alertes depuis la dernière visite
+        const prevTotal = parseInt(localStorage.getItem('sp_notif_count') || '0', 10);
+        if (total > prevTotal && prevTotal >= 0) {
+          // Demander la permission si pas encore accordée
+          if (Notification.permission === 'default') {
+            await Notification.requestPermission();
+          }
+          if (Notification.permission === 'granted' && total > 0) {
+            const newCount = total - prevTotal;
+            const critiques = items.filter(i => i.level === 'critique');
+            const title = critiques.length > 0
+              ? `🔴 ${critiques.length} alerte${critiques.length > 1 ? 's' : ''} critique${critiques.length > 1 ? 's' : ''}`
+              : `${newCount > 0 ? newCount + ' nouvelle' + (newCount > 1 ? 's' : '') + ' alerte' + (newCount > 1 ? 's' : '') : total + ' alerte' + (total > 1 ? 's' : '')}`;
+            const body = critiques.length > 0
+              ? critiques.slice(0, 2).map(i => i.title).join('\n')
+              : items.slice(0, 2).map(i => i.title).join('\n');
+            new Notification(title, { body, icon: '/icon-192.png', badge: '/icon-192.png' });
+          }
+        }
+        localStorage.setItem('sp_notif_count', String(total));
+      } catch (e) { /* silencieux */ }
+    }
+    loadNotifs();
   }, []);
 
   useEffect(() => {
@@ -113,7 +149,7 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        {NAV.map(({ to, icon: Icon, label, badge, dynamicBadge, unreadBadge, notifBadge }) => (
+        {NAV.map(({ to, icon: Icon, label, badge, unreadBadge, notifCategory, notifTotal }) => (
           <NavLink
             key={to}
             to={to}
@@ -132,19 +168,19 @@ export default function Sidebar() {
                 {badge}
               </span>
             )}
-            {dynamicBadge && pendingAbsences > 0 && (
-              <span className="text-xs px-1.5 py-0.5 rounded-full font-bold bg-amber-500 text-white min-w-[18px] text-center">
-                {pendingAbsences}
-              </span>
-            )}
             {unreadBadge && unreadMessages > 0 && (
               <span className="text-xs px-1.5 py-0.5 rounded-full font-bold bg-blue-500 text-white min-w-[18px] text-center">
                 {unreadMessages}
               </span>
             )}
-            {notifBadge && notifCount > 0 && (
+            {notifCategory && (catCounts[notifCategory] || 0) > 0 && (
               <span className="text-xs px-1.5 py-0.5 rounded-full font-bold bg-red-500 text-white min-w-[18px] text-center">
-                {notifCount > 99 ? '99+' : notifCount}
+                {catCounts[notifCategory]}
+              </span>
+            )}
+            {notifTotal && totalNotif > 0 && (
+              <span className="text-xs px-1.5 py-0.5 rounded-full font-bold bg-red-500 text-white min-w-[18px] text-center">
+                {totalNotif > 99 ? '99+' : totalNotif}
               </span>
             )}
           </NavLink>
