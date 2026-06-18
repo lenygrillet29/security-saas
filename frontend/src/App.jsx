@@ -28,6 +28,7 @@ import Documents from './pages/Documents';
 import Messagerie from './pages/Messagerie';
 import Taches from './pages/Taches';
 import Notifications from './pages/Notifications';
+import VacationReports from './pages/VacationReports';
 import AuditLog from './pages/AuditLog';
 import Simulation from './pages/Simulation';
 import RecapHeures from './pages/RecapHeures';
@@ -114,7 +115,8 @@ export default function App() {
               <Route path="documents"   element={<Documents />} />
               <Route path="messagerie"  element={<Messagerie />} />
               <Route path="taches"         element={<Taches />} />
-              <Route path="notifications"  element={<Notifications />} />
+              <Route path="notifications"     element={<Notifications />} />
+              <Route path="vacation-reports" element={<VacationReports />} />
               <Route path="audit"     element={<AuditLog />} />
               <Route path="simulation" element={<Simulation />} />
               <Route path="recap-heures" element={<RecapHeures />} />

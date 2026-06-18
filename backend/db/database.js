@@ -606,6 +606,39 @@ async function init() {
     ALTER TABLE absences ADD COLUMN IF NOT EXISTS requested_by_agent INTEGER DEFAULT 0;
   `);
 
+  // ── Rapports de vacation ─────────────────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS vacation_reports (
+      id           SERIAL PRIMARY KEY,
+      company_id   INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      shift_id     INTEGER REFERENCES shifts(id) ON DELETE SET NULL,
+      agent_id     INTEGER NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+      site_id      INTEGER REFERENCES sites(id) ON DELETE SET NULL,
+      report_date  TEXT NOT NULL,
+      start_time   TEXT,
+      end_time     TEXT,
+      status       TEXT NOT NULL DEFAULT 'brouillon',
+      nothing_to_report BOOLEAN NOT NULL DEFAULT FALSE,
+      observations TEXT,
+      incidents    TEXT,
+      visitors     TEXT,
+      equipment_check BOOLEAN DEFAULT TRUE,
+      equipment_notes TEXT,
+      signature    TEXT,
+      signed_at    TIMESTAMP,
+      created_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS vacation_report_events (
+      id         SERIAL PRIMARY KEY,
+      report_id  INTEGER NOT NULL REFERENCES vacation_reports(id) ON DELETE CASCADE,
+      time       TEXT NOT NULL,
+      type       TEXT NOT NULL DEFAULT 'observation',
+      description TEXT NOT NULL
+    );
+  `);
+
   console.log('[DB] PostgreSQL connecté — schéma multi-tenant initialisé');
 }
 

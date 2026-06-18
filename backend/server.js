@@ -118,6 +118,7 @@ app.use('/api/agent-documents',   require('./routes/agent-documents'));   // Doc
 app.use('/api/messages',          require('./routes/messages'));          // Messagerie interne
 app.use('/api/tasks',             require('./routes/tasks'));             // Tâches / To-do
 app.use('/api/notifications',     require('./routes/notifications'));     // Centre de notifications
+app.use('/api/vacation-reports',  require('./routes/vacation-reports'));  // Rapports de vacation
 app.use('/api/contract-templates', require('./routes/contract-templates')); // Modèles de contrats
 app.use('/api/audit',    require('./routes/audit'));     // Journal d'audit
 app.use('/api/export',   require('./routes/export'));    // Export CSV comptable
