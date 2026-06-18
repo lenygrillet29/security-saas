@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
-import { AlertTriangle, Menu, X } from 'lucide-react';
+import { AlertTriangle, Menu, Search } from 'lucide-react';
 import Sidebar from './Sidebar';
+import GlobalSearch from './GlobalSearch';
 import { API_BASE_URL } from '../api';
 
 const misconfig = import.meta.env.PROD && !import.meta.env.VITE_API_URL;
@@ -20,6 +21,7 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-dark-900 flex-col">
+      <GlobalSearch />
       {misconfig && (
         <div className="shrink-0 bg-red-900/80 border-b border-red-600/50 px-4 py-2 flex items-center gap-3 text-sm text-red-200 z-50">
           <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
@@ -63,12 +65,18 @@ export default function Layout() {
             >
               <Menu className="w-5 h-5" />
             </button>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-1">
               <div className="w-6 h-6 rounded-md bg-blue-600 flex items-center justify-center">
                 <span className="text-white text-xs font-bold">S</span>
               </div>
               <span className="text-white font-semibold text-sm">SecuroPlan</span>
             </div>
+            <button
+              onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))}
+              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-dark-700 transition-colors"
+            >
+              <Search className="w-5 h-5" />
+            </button>
           </div>
 
           <div className="p-4 md:p-6 max-w-[1400px] mx-auto w-full">

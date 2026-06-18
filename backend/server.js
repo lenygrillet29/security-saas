@@ -124,6 +124,7 @@ app.use('/api/audit',    require('./routes/audit'));     // Journal d'audit
 app.use('/api/export',   require('./routes/export'));    // Export CSV comptable
 app.use('/api/addons',       require('./routes/addons'));        // Add-ons payants
 app.use('/api/shift-offers', require('./routes/shift-offers')); // Offres de vacation
+app.use('/api/search',      require('./routes/search'));        // Recherche globale
 
 // ─── Gestionnaire d'erreurs ───────────────────────────────────────────────────
 app.use((err, req, res, next) => {
