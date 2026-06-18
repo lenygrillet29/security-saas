@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   ClipboardList, Plus, Search, ChevronDown, ChevronUp,
   CheckCircle, Clock, Edit2, Trash2, X, PenLine,
-  AlertTriangle, Eye, CalendarDays, User, MapPin,
+  AlertTriangle, Eye, CalendarDays, User, MapPin, Download,
 } from 'lucide-react';
 import { get, agentsApi, sitesApi } from '../api';
 import { useToast } from '../components/Toast';
@@ -211,7 +211,7 @@ function ReportForm({ report, agents, sites, onClose, onSaved }) {
 }
 
 // ── Détail rapport ────────────────────────────────────────────────────────────
-function ReportDetail({ report, onClose, onSigned, onEdit }) {
+function ReportDetail({ report, onClose, onSigned, onEdit, onDownload }) {
   const toast = useToast();
   const [signing, setSigning] = useState(false);
 
@@ -328,10 +328,13 @@ function ReportDetail({ report, onClose, onSigned, onEdit }) {
 
         <div className="flex gap-3 px-6 py-4 border-t border-dark-600 shrink-0">
           {report.status !== 'signe' && (
-            <button onClick={onEdit} className="btn-secondary flex-1 flex items-center justify-center gap-2">
+            <button onClick={onEdit} className="btn-secondary flex items-center justify-center gap-2 px-4">
               <Edit2 className="w-4 h-4" /> Modifier
             </button>
           )}
+          <button onClick={onDownload} className="btn-secondary flex items-center justify-center gap-2 px-4">
+            <Download className="w-4 h-4" /> PDF
+          </button>
           {report.status !== 'signe' && (
             <button onClick={sign} disabled={signing} className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40">
               <PenLine className="w-4 h-4" /> {signing ? 'Signature…' : 'Signer le rapport'}
@@ -389,6 +392,11 @@ export default function VacationReports() {
       const full = await get(`/vacation-reports/${r.id}`);
       setViewFull(full);
     } catch (e) { toast(e.message, 'error'); }
+  }
+
+  function downloadPdf(id) {
+    const token = localStorage.getItem('auth_token');
+    window.open(`${API}/pdf/vacation-report/${id}?token=${token}`, '_blank');
   }
 
   async function del(id) {
@@ -502,17 +510,21 @@ export default function VacationReports() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1 justify-end">
                       <button onClick={() => openDetail(r)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 transition-colors">
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 transition-colors" title="Voir">
                         <Eye className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => downloadPdf(r.id)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors" title="Télécharger PDF">
+                        <Download className="w-4 h-4" />
                       </button>
                       {r.status !== 'signe' && (
                         <button onClick={() => { setEditReport(r); setShowForm(true); }}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-dark-600 transition-colors">
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-dark-600 transition-colors" title="Modifier">
                           <Edit2 className="w-4 h-4" />
                         </button>
                       )}
                       <button onClick={() => del(r.id)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors">
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors" title="Supprimer">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -539,6 +551,7 @@ export default function VacationReports() {
           onClose={() => setViewFull(null)}
           onSigned={() => { setViewFull(null); load(); }}
           onEdit={() => { setEditReport(viewFull); setViewFull(null); setShowForm(true); }}
+          onDownload={() => downloadPdf(viewFull.id)}
         />
       )}
     </div>

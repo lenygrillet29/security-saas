@@ -389,4 +389,146 @@ router.get('/recap/agent/:agentId', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── PDF rapport de vacation ───────────────────────────────────────────────────
+router.get('/vacation-report/:id', async (req, res) => {
+  try {
+    const PDFDocument = require('pdfkit');
+    const report = await db.get(`
+      SELECT vr.*,
+        a.first_name AS agent_first, a.last_name AS agent_last,
+        s.name AS site_name, s.address AS site_address,
+        c.name AS company_name
+      FROM vacation_reports vr
+      JOIN agents a ON a.id = vr.agent_id
+      LEFT JOIN sites s ON s.id = vr.site_id
+      JOIN companies c ON c.id = vr.company_id
+      WHERE vr.id = ? AND vr.company_id = ?
+    `, [req.params.id, req.user.companyId]);
+    if (!report) return res.status(404).json({ error: 'Rapport introuvable' });
+
+    const events = await db.all(
+      'SELECT * FROM vacation_report_events WHERE report_id = ? ORDER BY time ASC',
+      [req.params.id]
+    );
+    const settings = await getSettings(req.user.companyId);
+
+    const doc = new PDFDocument({ size: 'A4', margin: 40, bufferPages: true });
+    const W = doc.page.width;
+    const BLUE = '#3B82F6'; const DARK = '#1E2535'; const LIGHT = '#CBD5E1'; const MID = '#64748B';
+
+    // ── En-tête ──
+    doc.rect(0, 0, W, 70).fill(DARK);
+    doc.fillColor(BLUE).fontSize(18).font('Helvetica-Bold').text('RAPPORT DE VACATION', 40, 18);
+    doc.fillColor(LIGHT).fontSize(9).font('Helvetica').text(settings.company_name || report.company_name, 40, 42);
+    const dateStr = new Date(report.report_date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    doc.fillColor(MID).text(dateStr, W - 260, 42, { width: 220, align: 'right' });
+
+    // ── Statut badge ──
+    const signed = report.status === 'signe';
+    doc.rect(W - 120, 10, 80, 22).fill(signed ? '#10B981' : '#F59E0B');
+    doc.fillColor('white').fontSize(8).font('Helvetica-Bold')
+       .text(signed ? 'SIGNÉ' : 'BROUILLON', W - 120, 17, { width: 80, align: 'center' });
+
+    let y = 90;
+
+    // ── Infos principales ──
+    const col = (W - 80) / 2;
+    const infoBox = (label, value, x, yy) => {
+      doc.fillColor(MID).fontSize(7).font('Helvetica').text(label.toUpperCase(), x, yy);
+      doc.fillColor('#F1F5F9').fontSize(10).font('Helvetica-Bold').text(value || '—', x, yy + 12, { width: col - 10 });
+    };
+    infoBox('Agent', `${report.agent_last} ${report.agent_first}`, 40, y);
+    infoBox('Site', report.site_name || 'Non précisé', 40 + col, y);
+    y += 38;
+    infoBox('Heure de prise de poste', report.start_time ? report.start_time.slice(0,5) : '—', 40, y);
+    infoBox('Heure de fin de service', report.end_time ? report.end_time.slice(0,5) : '—', 40 + col, y);
+    y += 38;
+
+    // Séparateur
+    doc.rect(40, y, W - 80, 1).fill('#2D3555'); y += 16;
+
+    // ── RAS ──
+    if (report.nothing_to_report) {
+      doc.rect(40, y, W - 80, 40).fill('#0F2E1A');
+      doc.rect(40, y, 4, 40).fill('#10B981');
+      doc.fillColor('#10B981').fontSize(11).font('Helvetica-Bold').text('✓ RIEN À SIGNALER (RAS)', 56, y + 14);
+      y += 56;
+    } else {
+      // ── Événements ──
+      if (events.length > 0) {
+        doc.fillColor(BLUE).fontSize(9).font('Helvetica-Bold').text('CHRONOLOGIE DES ÉVÉNEMENTS', 40, y); y += 14;
+        const TYPE_COLORS = { incident: '#EF4444', visiteur: '#F59E0B', ronde: '#10B981', intervention: '#F97316', observation: '#3B82F6', autre: '#94A3B8' };
+        events.forEach(ev => {
+          if (y > doc.page.height - 80) { doc.addPage(); y = 40; }
+          const c = TYPE_COLORS[ev.type] || '#94A3B8';
+          doc.rect(40, y, 3, 18).fill(c);
+          doc.fillColor(MID).fontSize(8).font('Helvetica').text(ev.time, 50, y + 4);
+          doc.fillColor(c).fontSize(7).font('Helvetica-Bold').text(ev.type.toUpperCase(), 90, y + 5);
+          doc.fillColor(LIGHT).fontSize(8).font('Helvetica').text(ev.description, 155, y + 4, { width: W - 195 });
+          y += 22;
+        });
+        y += 8;
+      }
+
+      // ── Observations ──
+      if (report.observations) {
+        if (y > doc.page.height - 80) { doc.addPage(); y = 40; }
+        doc.fillColor(BLUE).fontSize(9).font('Helvetica-Bold').text('OBSERVATIONS GÉNÉRALES', 40, y); y += 14;
+        doc.rect(40, y, W - 80, 1).fill('#2D3555'); y += 8;
+        doc.fillColor(LIGHT).fontSize(9).font('Helvetica').text(report.observations, 40, y, { width: W - 80 });
+        y += doc.heightOfString(report.observations, { width: W - 80 }) + 16;
+      }
+
+      // ── Incidents ──
+      if (report.incidents) {
+        if (y > doc.page.height - 80) { doc.addPage(); y = 40; }
+        doc.rect(40, y, W - 80, 14).fill('#2A0A0A');
+        doc.fillColor('#EF4444').fontSize(9).font('Helvetica-Bold').text('⚠ INCIDENTS / SIGNALEMENTS', 44, y + 3); y += 22;
+        doc.fillColor(LIGHT).fontSize(9).font('Helvetica').text(report.incidents, 40, y, { width: W - 80 });
+        y += doc.heightOfString(report.incidents, { width: W - 80 }) + 16;
+      }
+
+      // ── Visiteurs ──
+      if (report.visitors) {
+        if (y > doc.page.height - 60) { doc.addPage(); y = 40; }
+        doc.fillColor(BLUE).fontSize(9).font('Helvetica-Bold').text('ENTRÉES / VISITEURS', 40, y); y += 14;
+        doc.fillColor(LIGHT).fontSize(9).font('Helvetica').text(report.visitors, 40, y, { width: W - 80 });
+        y += doc.heightOfString(report.visitors, { width: W - 80 }) + 16;
+      }
+    }
+
+    // ── Équipements ──
+    if (y > doc.page.height - 80) { doc.addPage(); y = 40; }
+    doc.rect(40, y, W - 80, 28).fill(report.equipment_check ? '#0A2818' : '#2A1A0A');
+    doc.fillColor(report.equipment_check ? '#10B981' : '#F59E0B').fontSize(9).font('Helvetica-Bold')
+       .text(report.equipment_check ? '✓ Équipements vérifiés — tout en ordre' : `⚠ Anomalie équipements : ${report.equipment_notes || 'voir notes'}`, 50, y + 9);
+    y += 44;
+
+    // ── Zone signature ──
+    if (y > doc.page.height - 100) { doc.addPage(); y = 40; }
+    doc.rect(40, y, W - 80, 80).fill(DARK);
+    doc.fillColor(MID).fontSize(8).font('Helvetica').text('Je soussigné(e) certifie exacts les renseignements portés sur ce rapport de vacation.', 50, y + 10, { width: W - 100 });
+    doc.fillColor(LIGHT).fontSize(8).text('Nom et signature de l\'agent :', 50, y + 28).text('Visa responsable :', (W / 2) + 10, y + 28);
+    doc.rect(50, y + 42, (W - 80) / 2 - 20, 26).stroke('#2D3555');
+    doc.rect((W / 2) + 10, y + 42, (W - 80) / 2 - 20, 26).stroke('#2D3555');
+    if (signed && report.signed_at) {
+      const signDate = new Date(report.signed_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      doc.fillColor('#10B981').fontSize(7).text(`Signé électroniquement le ${signDate}`, 50, y + 50, { width: (W - 80) / 2 - 20, align: 'center' });
+    }
+
+    // ── Pied de page ──
+    const range = doc.bufferedPageRange();
+    const footer = [settings.company_name, settings.company_siret ? `SIRET ${settings.company_siret}` : null].filter(Boolean).join(' · ') || 'SecuroPlan';
+    for (let i = 0; i < range.count; i++) {
+      doc.switchToPage(range.start + i);
+      const ph = doc.page.height;
+      doc.rect(0, ph - 24, W, 24).fill('#1A1D2E');
+      doc.fillColor('#475569').fontSize(7).font('Helvetica')
+         .text(`${footer} · Rapport du ${report.report_date} — ${i + 1}/${range.count}`, 20, ph - 14, { width: W - 40, align: 'center', lineBreak: false });
+    }
+
+    streamPdf(res, doc, `rapport_vacation_${report.agent_last}_${report.report_date}.pdf`);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
