@@ -29,6 +29,7 @@ import Messagerie from './pages/Messagerie';
 import Taches from './pages/Taches';
 import Notifications from './pages/Notifications';
 import VacationReports from './pages/VacationReports';
+import Profile from './pages/Profile';
 import AuditLog from './pages/AuditLog';
 import Simulation from './pages/Simulation';
 import RecapHeures from './pages/RecapHeures';
@@ -117,6 +118,7 @@ export default function App() {
               <Route path="taches"         element={<Taches />} />
               <Route path="notifications"     element={<Notifications />} />
               <Route path="vacation-reports" element={<VacationReports />} />
+              <Route path="profile"          element={<Profile />} />
               <Route path="audit"     element={<AuditLog />} />
               <Route path="simulation" element={<Simulation />} />
               <Route path="recap-heures" element={<RecapHeures />} />

@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Calendar, Users, Building2,
   MapPin, FileText, Settings, Shield, ClipboardList,
-  LogOut, ChevronDown, CreditCard, ScrollText, Receipt, Activity, TrendingUp, Calculator, X, Download, Clock, Wallet, Sun, BarChart3, Package, GraduationCap, Siren, FolderOpen, MessageSquare, CheckSquare, Bell,
+  LogOut, ChevronDown, CreditCard, ScrollText, Receipt, Activity, TrendingUp, Calculator, X, Download, Clock, Wallet, Sun, BarChart3, Package, GraduationCap, Siren, FolderOpen, MessageSquare, CheckSquare, Bell, UserCircle,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
@@ -256,6 +256,14 @@ export default function Sidebar() {
               <div className="px-3 py-2 border-b border-dark-600">
                 <div className="text-xs text-slate-400 truncate">{user?.email}</div>
               </div>
+              <NavLink
+                to="/profile"
+                onClick={() => setShowUserMenu(false)}
+                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-slate-300 hover:bg-dark-600 transition-colors"
+              >
+                <UserCircle className="w-4 h-4" />
+                Mon profil
+              </NavLink>
               <button
                 onClick={handleLogout}
                 className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
