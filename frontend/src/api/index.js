@@ -32,6 +32,7 @@ async function request(method, path, body) {
 }
 
 const get = (path) => request('GET', path);
+export { get };
 const post = (path, body) => request('POST', path, body);
 const put = (path, body) => request('PUT', path, body);
 const del = (path) => request('DELETE', path);
@@ -288,7 +289,17 @@ export const messagesApi = {
   // Fil utilisateur
   userThread:   (userId) => get(`/messages/user/${userId}`),
   sendToUser:   (userId, body) => post(`/messages/user/${userId}`, { body }),
-  delete:       (id) => del(`/messages/${id}`),
+  // Groupes
+  groups:             () => get('/messages/groups'),
+  createGroup:        (data) => post('/messages/groups', data),
+  updateGroup:        (id, data) => put(`/messages/groups/${id}`, data),
+  deleteGroup:        (id) => del(`/messages/groups/${id}`),
+  groupMembers:       (id) => get(`/messages/groups/${id}/members`),
+  addGroupMembers:    (id, data) => post(`/messages/groups/${id}/members`, data),
+  removeGroupMember:  (groupId, memberId) => del(`/messages/groups/${groupId}/members/${memberId}`),
+  groupThread:        (id) => get(`/messages/groups/${id}/messages`),
+  sendToGroup:        (id, body) => post(`/messages/groups/${id}/messages`, { body }),
+  delete:             (id) => del(`/messages/${id}`),
 };
 
 // Documents agents
@@ -391,4 +402,9 @@ export const portalApi = {
   generate: (clientId) => post(`/clients/${clientId}/portal-token`, {}),
   send:     (clientId) => post(`/clients/${clientId}/portal-send`,  {}),
   revoke:   (clientId) => del(`/clients/${clientId}/portal-token`),
+};
+
+
+export const notificationsApi = {
+  list: () => get('/notifications'),
 };

@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Calendar, Users, Building2,
   MapPin, FileText, Settings, Shield, ClipboardList,
-  LogOut, ChevronDown, CreditCard, ScrollText, Receipt, Activity, TrendingUp, Calculator, X, Download, Clock, Wallet, Sun, BarChart3, Package, GraduationCap, Siren, FolderOpen, MessageSquare, CheckSquare,
+  LogOut, ChevronDown, CreditCard, ScrollText, Receipt, Activity, TrendingUp, Calculator, X, Download, Clock, Wallet, Sun, BarChart3, Package, GraduationCap, Siren, FolderOpen, MessageSquare, CheckSquare, Bell,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
@@ -25,8 +25,9 @@ const NAV = [
   { to: '/formations',  icon: GraduationCap, label: 'Formations' },
   { to: '/incidents',   icon: Siren,       label: 'Incidents' },
   { to: '/documents',   icon: FolderOpen,    label: 'Documents' },
-  { to: '/messagerie',  icon: MessageSquare, label: 'Messagerie', unreadBadge: true },
-  { to: '/taches',      icon: CheckSquare,   label: 'Tâches' },
+  { to: '/messagerie',     icon: MessageSquare, label: 'Messagerie',     unreadBadge: true },
+  { to: '/taches',         icon: CheckSquare,   label: 'Tâches' },
+  { to: '/notifications',  icon: Bell,          label: 'Notifications',  notifBadge: true },
   { to: '/audit',      icon: Activity,    label: 'Journal d\'audit' },
   { to: '/simulation', icon: TrendingUp,  label: 'Simulation marge' },
   { to: '/chiffrage',  icon: Calculator,  label: 'Chiffrage', badge: 'Pro' },
@@ -46,6 +47,7 @@ export default function Sidebar() {
   const [installed, setInstalled] = useState(false);
   const [pendingAbsences, setPendingAbsences] = useState(0);
   const [unreadMessages, setUnreadMessages]   = useState(0);
+  const [notifCount, setNotifCount]           = useState(0);
 
   useEffect(() => {
     const token = localStorage.getItem('auth_token');
@@ -56,6 +58,8 @@ export default function Sidebar() {
       .then(r => r.json()).then(data => { if (Array.isArray(data)) setPendingAbsences(data.length); }).catch(() => {});
     fetch(`${api}/messages/unread-count`, { headers })
       .then(r => r.json()).then(data => { setUnreadMessages(data.count || 0); }).catch(() => {});
+    fetch(`${api}/notifications`, { headers })
+      .then(r => r.json()).then(data => { setNotifCount(data.count || 0); }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -109,7 +113,7 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        {NAV.map(({ to, icon: Icon, label, badge, dynamicBadge, unreadBadge }) => (
+        {NAV.map(({ to, icon: Icon, label, badge, dynamicBadge, unreadBadge, notifBadge }) => (
           <NavLink
             key={to}
             to={to}
@@ -136,6 +140,11 @@ export default function Sidebar() {
             {unreadBadge && unreadMessages > 0 && (
               <span className="text-xs px-1.5 py-0.5 rounded-full font-bold bg-blue-500 text-white min-w-[18px] text-center">
                 {unreadMessages}
+              </span>
+            )}
+            {notifBadge && notifCount > 0 && (
+              <span className="text-xs px-1.5 py-0.5 rounded-full font-bold bg-red-500 text-white min-w-[18px] text-center">
+                {notifCount > 99 ? '99+' : notifCount}
               </span>
             )}
           </NavLink>
