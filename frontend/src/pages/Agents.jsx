@@ -493,10 +493,14 @@ function AgentsInner() {
   }
 
   async function handleOpenPortal(agent) {
+    const win = window.open('', '_blank');
     try {
       const { url } = await agentsApi.getPortalLink(agent.id);
-      window.open(url, '_blank');
-    } catch (err) { toast(err.message || 'Impossible d\'ouvrir', 'error'); }
+      win.location.href = url;
+    } catch (err) {
+      win.close();
+      toast(err.message || 'Impossible d\'ouvrir', 'error');
+    }
   }
 
   const filtered = agents.filter(a => {
