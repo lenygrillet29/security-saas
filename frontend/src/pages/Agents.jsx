@@ -415,6 +415,7 @@ function AgentsInner() {
   const [archiveId, setArchiveId] = useState(null);
   const [monthStats, setMonthStats] = useState({});
   const [limits, setLimits] = useState(null);
+  const [portalPreview, setPortalPreview] = useState(null);
 
   const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd');
   const monthEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd');
@@ -495,13 +496,7 @@ function AgentsInner() {
   async function handleOpenPortal(agent) {
     try {
       const { url } = await agentsApi.getPortalLink(agent.id);
-      const a = document.createElement('a');
-      a.href = url;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      setPortalPreview({ agent, url });
     } catch (err) {
       toast(err.message || 'Impossible d\'ouvrir', 'error');
     }
@@ -732,6 +727,24 @@ function AgentsInner() {
       )}
       {deleteId && (
         <Confirm title="Supprimer l'agent" message="Cette action supprimera tous les shifts et absences associés." onConfirm={handleDelete} onClose={() => setDeleteId(null)} />
+      )}
+      {portalPreview && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setPortalPreview(null)}>
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-sm w-full space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="text-white font-bold text-base">Portail de {portalPreview.agent.first_name} {portalPreview.agent.last_name}</div>
+            <p className="text-slate-400 text-sm">Clique sur le bouton pour ouvrir la vue agent dans un nouvel onglet.</p>
+            <a
+              href={portalPreview.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setPortalPreview(null)}
+              className="flex items-center justify-center gap-2 w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition-colors"
+            >
+              <Eye className="w-4 h-4" /> Ouvrir le portail agent
+            </a>
+            <button onClick={() => setPortalPreview(null)} className="w-full py-2 text-slate-500 text-sm hover:text-slate-300">Fermer</button>
+          </div>
+        </div>
       )}
     </div>
   );
