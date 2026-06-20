@@ -679,7 +679,7 @@ function AgentsInner() {
                         </button>
                         <button
                           onClick={() => handleOpenPortal(agent)}
-                          className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-600/10 rounded-lg transition-colors"
+                          className="p-1.5 text-emerald-400 hover:text-white hover:bg-emerald-600/30 rounded-lg transition-colors"
                           title="Voir le portail agent"
                         >
                           <Eye className="w-3.5 h-3.5" />
