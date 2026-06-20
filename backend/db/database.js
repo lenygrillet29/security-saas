@@ -383,6 +383,20 @@ async function init() {
     );
   `);
 
+  // ── Abonnements push managers/collaborateurs ─────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_push_subscriptions (
+      id         SERIAL PRIMARY KEY,
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      company_id INTEGER NOT NULL,
+      endpoint   TEXT NOT NULL,
+      p256dh     TEXT NOT NULL,
+      auth       TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, endpoint)
+    );
+  `);
+
   // ── Réinitialisation mot de passe ─────────────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS password_reset_tokens (

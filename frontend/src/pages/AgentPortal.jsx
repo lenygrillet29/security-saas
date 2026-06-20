@@ -739,6 +739,113 @@ function TabProfil({ agent, stats, token }) {
   );
 }
 
+// ── Gate notifications (modale obligatoire au 1er chargement) ────────────────
+function NotifGate({ token, onDone }) {
+  const [step, setStep]     = useState('ask'); // ask | loading | blocked | done
+  const [isIOS]             = useState(() => /iphone|ipad|ipod/i.test(navigator.userAgent));
+  const already             = window.Notification?.permission === 'granted';
+
+  function b64(s) {
+    const p = '='.repeat((4 - s.length % 4) % 4);
+    const b = (s + p).replace(/-/g, '+').replace(/_/g, '/');
+    return Uint8Array.from([...atob(b)].map(c => c.charCodeAt(0)));
+  }
+
+  async function activate() {
+    setStep('loading');
+    try {
+      const r = await fetch(`${API_BASE}/agent-portal/vapid-public-key`);
+      const { key } = await r.json();
+      if (!key) { onDone(); return; }
+
+      const perm = already ? 'granted' : await Notification.requestPermission();
+      if (perm !== 'granted') { setStep('blocked'); return; }
+
+      const reg = await navigator.serviceWorker.ready;
+      const ex  = await reg.pushManager.getSubscription();
+      const sub = ex || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(key) });
+      await fetch(`${API_BASE}/agent-portal/${token}/subscribe`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sub.toJSON()),
+      });
+      onDone();
+    } catch { onDone(); }
+  }
+
+  useEffect(() => {
+    if (!('Notification' in window) || !('serviceWorker' in navigator)) { onDone(); return; }
+    if (already) { activate(); return; }
+  }, []);
+
+  if (step === 'loading' || step === 'done') return (
+    <div className="fixed inset-0 bg-slate-900 flex items-center justify-center z-50">
+      <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
+    </div>
+  );
+
+  if (step === 'blocked') return (
+    <div className="fixed inset-0 bg-slate-900 flex items-center justify-center z-50 p-6">
+      <div className="max-w-xs w-full space-y-6 text-center">
+        <div className="w-20 h-20 rounded-3xl bg-red-900/40 border border-red-500/30 flex items-center justify-center mx-auto">
+          <BellOff className="w-10 h-10 text-red-400" />
+        </div>
+        <div>
+          <div className="text-xl font-bold text-white">Notifications bloquées</div>
+          <p className="text-slate-400 mt-2 text-sm">
+            {isIOS
+              ? 'Allez dans Réglages → Safari → Notifications → SecuroPlan et autorisez-les.'
+              : 'Cliquez sur l\'icône 🔒 dans la barre d\'adresse, puis autorisez les notifications.'}
+          </p>
+        </div>
+        <button onClick={onDone} className="w-full py-3 rounded-2xl bg-slate-700 text-slate-300 font-semibold">
+          Continuer sans notifications
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-sm flex items-end justify-center z-50 p-4 pb-8">
+      <div className="w-full max-w-sm bg-slate-800 border border-slate-700/60 rounded-3xl p-6 space-y-6">
+        <div className="text-center space-y-3">
+          <div className="w-20 h-20 rounded-3xl bg-blue-600 flex items-center justify-center mx-auto">
+            <Bell className="w-10 h-10 text-white" />
+          </div>
+          <div className="text-xl font-bold text-white">Activer les notifications</div>
+          <p className="text-slate-400 text-sm leading-relaxed">
+            Recevez vos rappels de vacation, les offres de remplacement et les confirmations de congé — même quand l'application est fermée.
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          {[
+            '⏰ Rappel 24h et 2h avant chaque vacation',
+            '📋 Nouvelles offres de vacation',
+            '✅ Réponses à vos demandes de congé',
+          ].map(t => (
+            <div key={t} className="flex items-center gap-3 text-sm text-slate-300">
+              <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+              {t}
+            </div>
+          ))}
+        </div>
+
+        <div className="space-y-2">
+          <button
+            onClick={activate}
+            className="w-full py-4 rounded-2xl bg-blue-600 text-white text-base font-bold active:scale-95 transition-all"
+          >
+            Activer les notifications
+          </button>
+          <button onClick={onDone} className="w-full py-3 text-slate-500 text-sm">
+            Pas maintenant
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Bannière installation PWA ─────────────────────────────────────────────────
 function InstallBanner() {
   const [prompt, setPrompt] = useState(null);
@@ -854,6 +961,9 @@ export default function AgentPortal() {
   const [error, setError]     = useState('');
   const [loading, setLoading] = useState(true);
   const [tab, setTab]         = useState('planning');
+  const [showNotifGate, setShowNotifGate] = useState(
+    'Notification' in window && window.Notification.permission === 'default'
+  );
 
   const load = useCallback(async () => {
     try {
@@ -922,6 +1032,10 @@ export default function AgentPortal() {
           )}
         </div>
       </header>
+
+      {showNotifGate && (
+        <NotifGate token={token} onDone={() => setShowNotifGate(false)} />
+      )}
 
       <InstallBanner />
 

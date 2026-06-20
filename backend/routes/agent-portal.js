@@ -9,6 +9,7 @@ const express  = require('express');
 const router   = express.Router();
 const { db }   = require('../db/database');
 const webpush  = require('web-push');
+const { sendPushToCompany } = require('../utils/pushUtils');
 
 // Config VAPID (si clés présentes)
 if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
@@ -134,6 +135,16 @@ router.post('/:token/offers/:offerId/:action', async (req, res) => {
       );
     }
 
+    const emoji = action === 'accept' ? '✅' : '❌';
+    const label = action === 'accept' ? 'accepté' : 'refusé';
+    sendPushToCompany(agent.company_id, {
+      title: `${emoji} Offre de vacation ${label}`,
+      body: `${agent.first_name} ${agent.last_name} a ${label} la vacation du ${new Date(offer.date).toLocaleDateString('fr-FR')}`,
+      icon: '/icon-192.png', badge: '/icon-192.png',
+      tag: `offer-response-${offer.id}`,
+      data: { url: '/planning' },
+    });
+
     res.json({ success: true, action });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -170,6 +181,15 @@ router.post('/:token/absences', async (req, res) => {
        VALUES (?, ?, ?, ?, ?, 'pending', ?, 1)`,
       [agent.company_id, agent.id, start_date, end_date, type, notes || null]
     );
+
+    const TYPES = { conge: 'Congé payé', maladie: 'Arrêt maladie', formation: 'Formation', autre: 'Autre' };
+    sendPushToCompany(agent.company_id, {
+      title: '📋 Nouvelle demande de congé',
+      body: `${agent.first_name} ${agent.last_name} — ${TYPES[type] || type} du ${new Date(start_date).toLocaleDateString('fr-FR')} au ${new Date(end_date).toLocaleDateString('fr-FR')}`,
+      icon: '/icon-192.png', badge: '/icon-192.png',
+      tag: `absence-${result.lastInsertRowid}`,
+      data: { url: '/absences' },
+    });
 
     res.status(201).json({ id: result.lastInsertRowid, status: 'pending' });
   } catch (e) { res.status(500).json({ error: e.message }); }

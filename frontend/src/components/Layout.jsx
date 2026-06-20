@@ -1,11 +1,74 @@
 import { useState, useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
-import { AlertTriangle, Menu, Search } from 'lucide-react';
+import { AlertTriangle, Menu, Search, Bell, X } from 'lucide-react';
 import Sidebar from './Sidebar';
 import GlobalSearch from './GlobalSearch';
-import { API_BASE_URL } from '../api';
+import { API_BASE_URL, pushApi } from '../api';
 
 const misconfig = import.meta.env.PROD && !import.meta.env.VITE_API_URL;
+
+function b64(s) {
+  const p = '='.repeat((4 - s.length % 4) % 4);
+  const b = (s + p).replace(/-/g, '+').replace(/_/g, '/');
+  return Uint8Array.from([...atob(b)].map(c => c.charCodeAt(0)));
+}
+
+function PushBanner() {
+  const [status, setStatus] = useState(() => {
+    if (!('Notification' in window) || !('serviceWorker' in navigator)) return 'unsupported';
+    if (Notification.permission === 'granted') return 'done';
+    if (Notification.permission === 'denied')  return 'blocked';
+    return 'ask';
+  });
+  const [dismissed, setDismissed] = useState(
+    () => localStorage.getItem('push-banner-dismissed') === '1'
+  );
+
+  async function enable() {
+    setStatus('loading');
+    try {
+      const key = await pushApi.vapidKey();
+      if (!key) { setStatus('unsupported'); return; }
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { setStatus('blocked'); return; }
+      const reg = await navigator.serviceWorker.ready;
+      const ex  = await reg.pushManager.getSubscription();
+      const sub = ex || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(key) });
+      await pushApi.subscribe(sub.toJSON());
+      setStatus('done');
+    } catch { setStatus('ask'); }
+  }
+
+  function dismiss() {
+    setDismissed(true);
+    localStorage.setItem('push-banner-dismissed', '1');
+  }
+
+  if (status === 'done' || status === 'unsupported' || dismissed) return null;
+
+  if (status === 'blocked') return (
+    <div className="shrink-0 bg-amber-900/40 border-b border-amber-600/30 px-4 py-2 flex items-center gap-3 text-sm text-amber-200">
+      <Bell className="w-4 h-4 text-amber-400 shrink-0" />
+      <span className="flex-1">Notifications bloquées — autorisez-les dans les réglages de votre navigateur pour recevoir les alertes.</span>
+      <button onClick={dismiss}><X className="w-4 h-4 text-amber-400" /></button>
+    </div>
+  );
+
+  return (
+    <div className="shrink-0 bg-blue-900/40 border-b border-blue-600/30 px-4 py-2 flex items-center gap-3 text-sm text-blue-200">
+      <Bell className="w-4 h-4 text-blue-400 shrink-0" />
+      <span className="flex-1">Activez les notifications pour recevoir les alertes en temps réel (demandes de congé, réponses aux offres…)</span>
+      <button
+        onClick={enable}
+        disabled={status === 'loading'}
+        className="shrink-0 px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-semibold transition-colors disabled:opacity-50"
+      >
+        {status === 'loading' ? '…' : 'Activer'}
+      </button>
+      <button onClick={dismiss}><X className="w-4 h-4 text-blue-400" /></button>
+    </div>
+  );
+}
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -22,6 +85,7 @@ export default function Layout() {
   return (
     <div className="flex h-screen overflow-hidden bg-dark-900 flex-col">
       <GlobalSearch />
+      <PushBanner />
       {misconfig && (
         <div className="shrink-0 bg-red-900/80 border-b border-red-600/50 px-4 py-2 flex items-center gap-3 text-sm text-red-200 z-50">
           <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />

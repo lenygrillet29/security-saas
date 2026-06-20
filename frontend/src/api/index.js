@@ -415,3 +415,9 @@ export const portalApi = {
 export const notificationsApi = {
   list: () => get('/notifications'),
 };
+
+export const pushApi = {
+  subscribe:   (sub) => post('/push/subscribe', sub),
+  unsubscribe: ()    => post('/push/unsubscribe', {}),
+  vapidKey:    ()    => fetch(`${BASE}/agent-portal/vapid-public-key`).then(r => r.json()).then(j => j.key),
+};
