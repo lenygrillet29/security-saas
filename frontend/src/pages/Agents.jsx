@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Plus, Edit2, Trash2, Phone, Mail, Search, Download, Archive, ArchiveRestore, Send, AlertTriangle, Zap, Smartphone, User, MapPin, CreditCard, Shield, CalendarDays, ChevronDown, ChevronUp, Camera, X, BadgeCheck, Upload, CheckCircle, Link2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, Phone, Mail, Search, Download, Archive, ArchiveRestore, Send, AlertTriangle, Zap, Smartphone, User, MapPin, CreditCard, Shield, CalendarDays, ChevronDown, ChevronUp, Camera, X, BadgeCheck, Upload, CheckCircle, Link2, Eye } from 'lucide-react';
 import { agentsApi, shiftsApi, pdfApi, emailApi, addonsApi } from '../api';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Modal from '../components/Modal';
@@ -492,6 +492,13 @@ function AgentsInner() {
     } catch (err) { toast(err.message || 'Impossible de copier', 'error'); }
   }
 
+  async function handleOpenPortal(agent) {
+    try {
+      const { url } = await agentsApi.getPortalLink(agent.id);
+      window.open(url, '_blank');
+    } catch (err) { toast(err.message || 'Impossible d\'ouvrir', 'error'); }
+  }
+
   const filtered = agents.filter(a => {
     const matchSearch = `${a.first_name} ${a.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
       (a.employee_number || '').includes(search);
@@ -665,6 +672,13 @@ function AgentsInner() {
                           title="Copier le lien portail agent"
                         >
                           <Link2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleOpenPortal(agent)}
+                          className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-600/10 rounded-lg transition-colors"
+                          title="Voir le portail agent"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => handleArchive(agent)}
