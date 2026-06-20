@@ -477,7 +477,7 @@ function SendOfferModal({ shift, agents, onClose, onSent }) {
   );
 }
 
-function ExportModal({ onClose, agents, sites }) {
+function ExportModal({ onClose, agents, sites, clients }) {
   const toast = useToast();
   const [type, setType] = useState('agent');
   const [selectedId, setSelectedId] = useState('');
@@ -492,6 +492,7 @@ function ExportModal({ onClose, agents, sites }) {
     if (!sendEmail) {
       if (type === 'agent') pdfApi.agentPlanning(selectedId, params);
       else if (type === 'site') pdfApi.sitePlanning(selectedId, params);
+      else if (type === 'client') pdfApi.clientPlanning(selectedId, params);
       onClose();
     } else {
       try {
@@ -588,6 +589,7 @@ function ExportModal({ onClose, agents, sites }) {
               <option value="">Sélectionner...</option>
               {type === 'agent' && agents.map(a => <option key={a.id} value={a.id}>{a.first_name} {a.last_name}</option>)}
               {type === 'site' && sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              {type === 'client' && (clients || []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
           <div className="flex items-center gap-2 mt-3">
@@ -1488,6 +1490,7 @@ function PlanningInner() {
           onClose={() => setExportModal(false)}
           agents={agents}
           sites={sites}
+          clients={clients}
         />
       )}
 

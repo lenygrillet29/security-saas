@@ -1,4 +1,4 @@
-const APP_URL = process.env.APP_URL || 'https://securitysaas.vercel.app';
+const APP_URL = process.env.APP_URL || 'https://securoplan.vercel.app';
 
 function base(title, content) {
   return `<!DOCTYPE html>

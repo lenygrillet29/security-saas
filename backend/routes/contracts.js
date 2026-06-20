@@ -6,7 +6,7 @@ const { requireWriter } = require('../middleware/auth');
 const { sendSystemEmail } = require('../utils/systemEmail');
 const templates = require('../utils/emailTemplates');
 
-const APP_URL = process.env.APP_URL || 'https://securitysaas.vercel.app';
+const APP_URL = process.env.APP_URL || 'https://securoplan.vercel.app';
 
 // ─── GET liste ────────────────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
