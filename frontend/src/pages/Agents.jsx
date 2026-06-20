@@ -493,12 +493,16 @@ function AgentsInner() {
   }
 
   async function handleOpenPortal(agent) {
-    const win = window.open('', '_blank');
     try {
       const { url } = await agentsApi.getPortalLink(agent.id);
-      win.location.href = url;
+      const a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     } catch (err) {
-      win.close();
       toast(err.message || 'Impossible d\'ouvrir', 'error');
     }
   }
