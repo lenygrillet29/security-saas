@@ -112,6 +112,9 @@ function AgentForm({ agent, onSave, onClose }) {
     nationality:     agent?.nationality     || '',
     employee_number: agent?.employee_number || '',
     contract_type:   agent?.contract_type   || 'CDI',
+    work_time:       agent?.work_time       || 'full',
+    contract_hours:  agent?.contract_hours  || '',
+    qualifications:  (() => { try { return JSON.parse(agent?.qualifications || '[]'); } catch { return []; } })(),
     hourly_rate:     agent?.hourly_rate     || '',
     entry_date:      agent?.entry_date      || '',
     exit_date:       agent?.exit_date       || '',
@@ -210,6 +213,19 @@ function AgentForm({ agent, onSave, onClose }) {
             </select>
           </div>
         </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="label">Temps de travail</label>
+            <select className="input" value={form.work_time} onChange={e => set('work_time', e.target.value)}>
+              <option value="full">Temps complet</option>
+              <option value="part">Temps partiel</option>
+            </select>
+          </div>
+          <div>
+            <label className="label">Heures / semaine</label>
+            <input type="number" step="0.5" className="input" value={form.contract_hours} onChange={e => set('contract_hours', e.target.value)} placeholder={form.work_time === 'full' ? '35' : 'ex: 24'} />
+          </div>
+        </div>
         <div className="grid grid-cols-3 gap-4">
           <div>
             <label className="label">Taux horaire (€/h)</label>
@@ -224,6 +240,32 @@ function AgentForm({ agent, onSave, onClose }) {
             <input type="date" className="input" value={form.exit_date} onChange={e => set('exit_date', e.target.value)} />
           </div>
         </div>
+      </FormSection>
+
+      {/* Qualifications */}
+      <FormSection icon={Shield} title="Qualifications" color="text-violet-400" collapsible defaultOpen={form.qualifications?.length > 0}>
+        {(() => {
+          const QUALS = ['ADS', 'CQP APS', 'SSIAP 1', 'SSIAP 2', 'SSIAP 3', 'Cynophile', 'SST', 'Habilitation électrique', 'Permis B', 'Permis C', 'AFGSU'];
+          const toggle = (q) => {
+            const current = form.qualifications || [];
+            set('qualifications', current.includes(q) ? current.filter(x => x !== q) : [...current, q]);
+          };
+          return (
+            <div className="flex flex-wrap gap-2">
+              {QUALS.map(q => {
+                const active = (form.qualifications || []).includes(q);
+                return (
+                  <button key={q} type="button" onClick={() => toggle(q)}
+                    className={`px-3 py-1.5 rounded-xl text-sm font-semibold border transition-colors ${
+                      active ? 'bg-violet-600 border-violet-500 text-white' : 'bg-dark-700 border-dark-500 text-slate-400 hover:border-violet-500/50'
+                    }`}>
+                    {q}
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })()}
       </FormSection>
 
       {/* Identifiants pro */}
@@ -596,6 +638,7 @@ function AgentsInner() {
                         <div>
                           <div className="text-sm font-medium text-white">{agent.first_name} {agent.last_name}</div>
                           {agent.employee_number && <div className="text-xs text-slate-500">N° {agent.employee_number}</div>}
+                          {(() => { try { const q = JSON.parse(agent.qualifications || '[]'); return q.length > 0 ? <div className="flex flex-wrap gap-1 mt-0.5">{q.slice(0,3).map(x => <span key={x} className="text-[10px] px-1.5 py-0.5 bg-violet-600/20 text-violet-300 rounded-md">{x}</span>)}{q.length > 3 && <span className="text-[10px] text-slate-500">+{q.length-3}</span>}</div> : null; } catch { return null; } })()}
                         </div>
                       </div>
                     </td>

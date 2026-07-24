@@ -346,7 +346,10 @@ async function init() {
     ALTER TABLE agents ADD COLUMN IF NOT EXISTS carte_pro_expiry TEXT;
     ALTER TABLE agents ADD COLUMN IF NOT EXISTS entry_date    TEXT;
     ALTER TABLE agents ADD COLUMN IF NOT EXISTS exit_date     TEXT;
-    ALTER TABLE agents ADD COLUMN IF NOT EXISTS photo         TEXT;
+    ALTER TABLE agents ADD COLUMN IF NOT EXISTS photo              TEXT;
+    ALTER TABLE agents ADD COLUMN IF NOT EXISTS work_time          TEXT DEFAULT 'full';
+    ALTER TABLE agents ADD COLUMN IF NOT EXISTS contract_hours     REAL;
+    ALTER TABLE agents ADD COLUMN IF NOT EXISTS qualifications     TEXT DEFAULT '[]';
   `);
 
   // ── Contrats de prestation clients ───────────────────────────────────────────

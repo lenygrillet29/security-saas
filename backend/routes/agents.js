@@ -66,7 +66,8 @@ router.get('/:id', async (req, res) => {
 router.post('/', requireWriter, async (req, res) => {
   try {
     const { first_name, last_name, email, phone, employee_number, contract_type, hourly_rate, color, notes,
-            address, birth_date, birth_place, nationality, carte_vitale, carte_pro, carte_pro_expiry, entry_date, exit_date } = req.body;
+            address, birth_date, birth_place, nationality, carte_vitale, carte_pro, carte_pro_expiry, entry_date, exit_date,
+            work_time, contract_hours, qualifications } = req.body;
     if (!first_name || !last_name) return res.status(400).json({ error: 'Prénom et nom requis' });
     if (!email) return res.status(400).json({ error: 'Email requis' });
 
@@ -85,13 +86,15 @@ router.post('/', requireWriter, async (req, res) => {
     const result = await db.insert(
       `INSERT INTO agents (company_id, first_name, last_name, email, phone, employee_number, contract_type,
         hourly_rate, color, notes, agent_token, address, birth_date, birth_place, nationality,
-        carte_vitale, carte_pro, carte_pro_expiry, entry_date, exit_date)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        carte_vitale, carte_pro, carte_pro_expiry, entry_date, exit_date,
+        work_time, contract_hours, qualifications)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [req.user.companyId, first_name, last_name, email || null, phone || null,
         employee_number || null, contract_type || 'CDI', hourly_rate || 0, color || '#3B82F6',
         notes || null, agentToken,
         address || null, birth_date || null, birth_place || null, nationality || null,
-        carte_vitale || null, carte_pro || null, carte_pro_expiry || null, entry_date || null, exit_date || null]
+        carte_vitale || null, carte_pro || null, carte_pro_expiry || null, entry_date || null, exit_date || null,
+        work_time || 'full', contract_hours || null, JSON.stringify(qualifications || [])]
     );
     const agent = await db.get('SELECT * FROM agents WHERE id = ?', [result.lastInsertRowid]);
     logAudit(req, { action: 'CREATE', entityType: 'agent', entityId: agent.id, entityName: `${first_name} ${last_name}` });
@@ -118,7 +121,8 @@ router.post('/', requireWriter, async (req, res) => {
 router.put('/:id', requireWriter, async (req, res) => {
   try {
     const { first_name, last_name, email, phone, employee_number, contract_type, hourly_rate, color, active, notes,
-            address, birth_date, birth_place, nationality, carte_vitale, carte_pro, carte_pro_expiry, entry_date, exit_date, photo } = req.body;
+            address, birth_date, birth_place, nationality, carte_vitale, carte_pro, carte_pro_expiry, entry_date, exit_date, photo,
+            work_time, contract_hours, qualifications } = req.body;
     const existing = await db.get('SELECT * FROM agents WHERE id = ? AND company_id = ?', [req.params.id, req.user.companyId]);
     if (!existing) return res.status(404).json({ error: 'Agent non trouvé' });
     await db.run(
@@ -126,6 +130,7 @@ router.put('/:id', requireWriter, async (req, res) => {
        hourly_rate=?, color=?, active=?, notes=?,
        address=?, birth_date=?, birth_place=?, nationality=?,
        carte_vitale=?, carte_pro=?, carte_pro_expiry=?, entry_date=?, exit_date=?,
+       work_time=?, contract_hours=?, qualifications=?,
        photo=COALESCE(?, photo)
        WHERE id=?`,
       [first_name, last_name, email || null, phone || null, employee_number || null,
@@ -133,6 +138,7 @@ router.put('/:id', requireWriter, async (req, res) => {
         active !== undefined ? (active ? 1 : 0) : 1, notes || null,
         address || null, birth_date || null, birth_place || null, nationality || null,
         carte_vitale || null, carte_pro || null, carte_pro_expiry || null, entry_date || null, exit_date || null,
+        work_time || 'full', contract_hours || null, JSON.stringify(qualifications || []),
         photo || null,
         req.params.id]
     );
