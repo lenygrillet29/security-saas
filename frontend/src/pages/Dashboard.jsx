@@ -65,13 +65,13 @@ function TodayShiftRow({ shift }) {
   const checkinDone  = !!shift.checkin_at;
   const checkoutDone = !!shift.checkout_at;
 
-  let badge, badgeClass;
+  let badge, badgeClass, dot;
   if (checkoutDone) {
-    badge = 'Terminé'; badgeClass = 'bg-slate-700 text-slate-400';
+    badge = 'Terminé'; badgeClass = 'bg-slate-700 text-slate-400'; dot = '⬛';
   } else if (checkinDone) {
-    badge = 'En poste'; badgeClass = 'bg-emerald-500/20 text-emerald-400';
+    badge = 'En poste'; badgeClass = 'bg-emerald-500/20 text-emerald-400'; dot = '🟢';
   } else {
-    badge = 'Pas encore pointé'; badgeClass = 'bg-amber-500/15 text-amber-400';
+    badge = 'Pas encore pointé'; badgeClass = 'bg-amber-500/15 text-amber-400'; dot = '🟡';
   }
 
   return (
@@ -89,6 +89,13 @@ function TodayShiftRow({ shift }) {
         <div className="text-xs text-slate-500 truncate">
           {shift.site_name} · {shift.start_time?.slice(0,5)} – {shift.end_time?.slice(0,5)}
         </div>
+        {checkinDone && (
+          <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
+            <span className="text-emerald-400">↓ {shift.checkin_at?.slice(11,16)}</span>
+            {checkoutDone && <span className="text-orange-400">↑ {shift.checkout_at?.slice(11,16)}</span>}
+            {shift.checkin_distance != null && <span>· {shift.checkin_distance}m</span>}
+          </div>
+        )}
       </div>
       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${badgeClass}`}>
         {badge}

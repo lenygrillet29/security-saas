@@ -821,6 +821,12 @@ function WeeklyView({ days, shifts, absences, agents, onAddShift, onEditShift, o
                               )}
                               {shift.start_time}–{shift.end_time}
                               {shift.recurrence_id && <RefreshCw className="w-2 h-2 opacity-60 shrink-0" />}
+                              {shift.checkin_at && shift.checkout_at
+                                ? <span title="Arrivée + sortie pointées" className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                                : shift.checkin_at
+                                ? <span title={`En service depuis ${shift.checkin_at?.slice(11,16)}`} className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0 animate-pulse" />
+                                : null
+                              }
                             </span>
                             <div className="hidden group-hover:flex gap-0.5 ml-1">
                               <button onClick={() => onEditShift(shift)} className="hover:text-white p-0.5 rounded">

@@ -50,14 +50,16 @@ function getCoords() {
 
 // ── Carte vacation du jour ────────────────────────────────────────────────────
 function TodayShiftCard({ shift, token, onUpdated }) {
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState('');
+  const [phase, setPhase] = useState('idle'); // idle | gps | saving
+  const [err, setErr]     = useState('');
   const done = shift.checkin_at && shift.checkout_at;
 
   async function punch() {
-    setLoading(true); setErr('');
+    setErr('');
     try {
+      setPhase('gps');
       const coords = await getCoords();
+      setPhase('saving');
       const action = shift.checkin_at ? 'checkout' : 'checkin';
       const r = await fetch(`${API_BASE}/agent-portal/${token}/${action}/${shift.id}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -67,8 +69,11 @@ function TodayShiftCard({ shift, token, onUpdated }) {
       if (!r.ok) throw new Error(j.error || 'Erreur');
       onUpdated();
     } catch (e) { setErr(e.message); }
-    finally { setLoading(false); }
+    finally { setPhase('idle'); }
   }
+
+  const isCheckin = !shift.checkin_at;
+  const step = done ? 3 : shift.checkin_at ? 2 : 1;
 
   return (
     <div className={`rounded-3xl overflow-hidden ${
@@ -76,10 +81,23 @@ function TodayShiftCard({ shift, token, onUpdated }) {
            : shift.checkin_at ? 'bg-orange-900/30 border border-orange-500/30'
            : 'bg-blue-900/40 border border-blue-500/30'
     }`}>
-      {/* Bandeau coloré haut */}
-      <div className={`h-1.5 w-full ${done ? 'bg-emerald-500' : shift.checkin_at ? 'bg-orange-400' : 'bg-blue-500'}`} />
+      {/* Barre de progression 3 étapes */}
+      <div className="flex h-1.5 w-full">
+        <div className={`flex-1 ${step >= 1 ? (step === 1 ? 'bg-blue-500' : 'bg-emerald-500') : 'bg-slate-700'}`} />
+        <div className={`flex-1 mx-0.5 ${step >= 2 ? (step === 2 ? 'bg-orange-400' : 'bg-emerald-500') : 'bg-slate-700'}`} />
+        <div className={`flex-1 ${step >= 3 ? 'bg-emerald-500' : 'bg-slate-700'}`} />
+      </div>
 
       <div className="p-5 space-y-4">
+        {/* Étape label */}
+        <div className={`text-xs font-semibold tracking-wide uppercase ${
+          done ? 'text-emerald-400' : shift.checkin_at ? 'text-orange-400' : 'text-blue-400'
+        }`}>
+          {done ? '✅ Vacation terminée'
+            : shift.checkin_at ? '⏳ En service — pointez la sortie en fin de vacation'
+            : '📋 Vacation du jour — pointez votre arrivée sur site'}
+        </div>
+
         {/* Site + horaires */}
         <div>
           <div className="text-xl font-bold text-white leading-tight">{shift.site_name}</div>
@@ -109,20 +127,26 @@ function TodayShiftCard({ shift, token, onUpdated }) {
           </div>
         )}
 
-        {/* Statut pointage */}
-        {shift.checkin_at && (
-          <div className="space-y-1.5 bg-slate-800/60 rounded-2xl p-3">
-            <div className="flex items-center gap-2 text-emerald-400 text-sm font-medium">
-              <LogIn className="w-4 h-4" />
-              Arrivée pointée à {format(new Date(shift.checkin_at), 'HH:mm')}
-              {shift.checkin_distance != null && (
-                <span className="text-slate-500 text-xs">· {shift.checkin_distance}m</span>
-              )}
+        {/* Récap pointages */}
+        {(shift.checkin_at || shift.checkout_at) && (
+          <div className="bg-slate-800/60 rounded-2xl p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-emerald-400 text-sm font-medium">
+                <LogIn className="w-4 h-4" /> Arrivée
+              </div>
+              <div className="text-right">
+                <span className="text-white font-bold">{format(new Date(shift.checkin_at), 'HH:mm')}</span>
+                {shift.checkin_distance != null && (
+                  <span className="text-slate-500 text-xs ml-2">à {shift.checkin_distance}m du site</span>
+                )}
+              </div>
             </div>
             {shift.checkout_at && (
-              <div className="flex items-center gap-2 text-orange-400 text-sm font-medium">
-                <LogOut className="w-4 h-4" />
-                Sortie pointée à {format(new Date(shift.checkout_at), 'HH:mm')}
+              <div className="flex items-center justify-between border-t border-slate-700/60 pt-2">
+                <div className="flex items-center gap-2 text-orange-400 text-sm font-medium">
+                  <LogOut className="w-4 h-4" /> Sortie
+                </div>
+                <span className="text-white font-bold">{format(new Date(shift.checkout_at), 'HH:mm')}</span>
               </div>
             )}
           </div>
@@ -130,33 +154,38 @@ function TodayShiftCard({ shift, token, onUpdated }) {
 
         {/* Bouton pointer */}
         {!done && (
-          <button
-            onClick={punch}
-            disabled={loading}
-            className={`w-full py-4 rounded-2xl text-lg font-bold flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-60 ${
-              shift.checkin_at
-                ? 'bg-orange-500 text-white'
-                : 'bg-blue-600 text-white'
-            }`}
-          >
-            {loading ? <Loader2 className="w-6 h-6 animate-spin" />
-              : shift.checkin_at
-              ? <><LogOut className="w-6 h-6" /> Pointer la sortie</>
-              : <><LogIn className="w-6 h-6" /> Pointer l'arrivée</>
-            }
-          </button>
+          <>
+            {isCheckin && phase === 'idle' && (
+              <p className="text-xs text-slate-500 text-center flex items-center justify-center gap-1">
+                <MapPin className="w-3.5 h-3.5" /> Votre position GPS sera vérifiée — soyez sur le site (rayon 200m)
+              </p>
+            )}
+            <button
+              onClick={punch}
+              disabled={phase !== 'idle'}
+              className={`w-full py-5 rounded-2xl text-lg font-bold flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-70 shadow-lg ${
+                shift.checkin_at ? 'bg-orange-500 hover:bg-orange-400 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'
+              }`}
+            >
+              {phase === 'gps'   ? <><Loader2 className="w-6 h-6 animate-spin" /> Localisation GPS…</>
+               : phase === 'saving' ? <><Loader2 className="w-6 h-6 animate-spin" /> Enregistrement…</>
+               : shift.checkin_at  ? <><LogOut className="w-6 h-6" /> Pointer ma sortie</>
+               :                     <><LogIn className="w-6 h-6" /> Pointer mon arrivée</>
+              }
+            </button>
+          </>
         )}
 
         {done && (
-          <div className="flex items-center justify-center gap-2 py-3 text-emerald-400 font-semibold">
-            <CheckCircle className="w-5 h-5" /> Vacation terminée
+          <div className="flex items-center justify-center gap-2 py-3 text-emerald-400 font-semibold text-lg">
+            <CheckCircle className="w-6 h-6" /> Vacation terminée — bonne fin de journée !
           </div>
         )}
 
         {err && (
           <div className="flex items-start gap-2.5 bg-red-950/60 border border-red-500/40 rounded-2xl p-4">
             <MapPin className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-            <p className="text-red-300 text-sm">{err}</p>
+            <p className="text-red-300 text-sm leading-relaxed">{err}</p>
           </div>
         )}
       </div>
