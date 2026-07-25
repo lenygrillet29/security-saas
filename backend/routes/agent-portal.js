@@ -202,7 +202,10 @@ router.post('/:token/checkin/:shiftId', async (req, res) => {
     if (!agent) return res.status(404).json({ error: 'Lien invalide' });
 
     const shift = await db.get(
-      'SELECT * FROM shifts WHERE id = ? AND agent_id = ?',
+      `SELECT sh.*, s.latitude, s.longitude
+       FROM shifts sh
+       JOIN sites s ON s.id = sh.site_id
+       WHERE sh.id = ? AND sh.agent_id = ?`,
       [req.params.shiftId, agent.id]
     );
     if (!shift) return res.status(404).json({ error: 'Vacation non trouvée' });
@@ -210,18 +213,27 @@ router.post('/:token/checkin/:shiftId', async (req, res) => {
 
     const { lat, lng } = req.body;
 
-    // Calcul distance si le site a des coordonnées
+    // Calcul distance et blocage si > 200m
     let distance = null;
-    if (lat && lng && shift.latitude && shift.longitude) {
+    if (shift.latitude && shift.longitude) {
+      if (!lat || !lng) {
+        return res.status(403).json({ error: 'Géolocalisation requise pour pointer sur ce site.' });
+      }
       const R = 6371000;
       const dLat = (shift.latitude - lat) * Math.PI / 180;
       const dLng = (shift.longitude - lng) * Math.PI / 180;
       const a = Math.sin(dLat/2)**2 + Math.cos(lat*Math.PI/180) * Math.cos(shift.latitude*Math.PI/180) * Math.sin(dLng/2)**2;
       distance = Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+      if (distance > 200) {
+        return res.status(403).json({
+          error: `Vous êtes trop loin du site (${distance}m). Vous devez être dans un rayon de 200m pour pointer.`,
+          distance
+        });
+      }
     }
 
     await db.run(
-      `UPDATE shifts SET checkin_at = NOW(), checkin_lat = ?, checkin_lng = ?, checkin_distance = ? WHERE id = ?`,
+      `UPDATE shifts SET checkin_at = datetime('now'), checkin_lat = ?, checkin_lng = ?, checkin_distance = ? WHERE id = ?`,
       [lat || null, lng || null, distance, shift.id]
     );
 
@@ -245,7 +257,7 @@ router.post('/:token/checkout/:shiftId', async (req, res) => {
 
     const { lat, lng } = req.body;
     await db.run(
-      `UPDATE shifts SET checkout_at = NOW(), checkout_lat = ?, checkout_lng = ? WHERE id = ?`,
+      `UPDATE shifts SET checkout_at = datetime('now'), checkout_lat = ?, checkout_lng = ? WHERE id = ?`,
       [lat || null, lng || null, shift.id]
     );
 
