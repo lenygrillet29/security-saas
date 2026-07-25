@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, MapPin, Search, Download, Sun, Moon } from 'lucide-react';
+import { Plus, Edit2, Trash2, MapPin, Search, Download, Sun, Moon, Loader2, LocateFixed } from 'lucide-react';
 import { sitesApi, clientsApi, pdfApi } from '../api';
 import Modal from '../components/Modal';
 import Confirm from '../components/Confirm';
@@ -23,6 +23,24 @@ function SiteForm({ site, clients, onSave, onClose }) {
     active:             site?.active !== undefined ? site.active : 1,
   });
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  const [geocoding, setGeocoding] = useState(false);
+
+  async function geocodeAddress() {
+    const q = [form.address, form.city].filter(Boolean).join(', ');
+    if (!q) return toast('Renseignez d\'abord l\'adresse et la ville', 'error');
+    setGeocoding(true);
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`, {
+        headers: { 'Accept-Language': 'fr' }
+      });
+      const data = await r.json();
+      if (!data.length) { toast('Adresse introuvable, vérifiez l\'adresse', 'error'); return; }
+      set('latitude', parseFloat(data[0].lat).toFixed(6));
+      set('longitude', parseFloat(data[0].lon).toFixed(6));
+      toast('Coordonnées GPS trouvées ✓');
+    } catch { toast('Erreur de géocodage', 'error'); }
+    finally { setGeocoding(false); }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -79,7 +97,12 @@ function SiteForm({ site, clients, onSave, onClose }) {
           <MapPin className="w-3.5 h-3.5 text-blue-400" />
           Coordonnées GPS (pour la prise de service obligatoire à 200m)
         </div>
-        <div className="grid grid-cols-2 gap-4 mb-3">
+        <button type="button" onClick={geocodeAddress} disabled={geocoding}
+          className="mb-3 flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors">
+          {geocoding ? <Loader2 className="w-4 h-4 animate-spin" /> : <LocateFixed className="w-4 h-4" />}
+          {geocoding ? 'Géocodage…' : 'Géolocaliser l\'adresse automatiquement'}
+        </button>
+        <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="label">Latitude</label>
             <input type="number" step="any" className="input" value={form.latitude} onChange={e => set('latitude', e.target.value)} placeholder="48.8566" />
@@ -89,11 +112,11 @@ function SiteForm({ site, clients, onSave, onClose }) {
             <input type="number" step="any" className="input" value={form.longitude} onChange={e => set('longitude', e.target.value)} placeholder="2.3522" />
           </div>
         </div>
-        <p className="text-xs text-slate-500">
-          💡 Cherchez l'adresse sur{' '}
-          <a href="https://www.latlong.net/" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline">latlong.net</a>
-          {' '}pour obtenir les coordonnées.
-        </p>
+        {form.latitude && form.longitude && (
+          <p className="text-xs text-emerald-400 mt-2 flex items-center gap-1">
+            <LocateFixed className="w-3.5 h-3.5" /> Position configurée — les agents devront être dans un rayon de 200m pour pointer.
+          </p>
+        )}
       </div>
 
       {/* Consignes du site */}

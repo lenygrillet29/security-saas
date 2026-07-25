@@ -39,8 +39,11 @@ function getCoords() {
     if (!navigator.geolocation) return resolve({});
     navigator.geolocation.getCurrentPosition(
       p => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
-      () => resolve({}),
-      { timeout: 8000, enableHighAccuracy: true }
+      err => {
+        if (err.code === 1) reject(new Error('Géolocalisation refusée. Autorisez la localisation dans votre navigateur.'));
+        else reject(new Error('Impossible d\'obtenir votre position. Vérifiez que le GPS est activé.'));
+      },
+      { timeout: 10000, enableHighAccuracy: true }
     );
   });
 }
@@ -150,7 +153,12 @@ function TodayShiftCard({ shift, token, onUpdated }) {
           </div>
         )}
 
-        {err && <p className="text-red-400 text-sm text-center">{err}</p>}
+        {err && (
+          <div className="flex items-start gap-2.5 bg-red-950/60 border border-red-500/40 rounded-2xl p-4">
+            <MapPin className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+            <p className="text-red-300 text-sm">{err}</p>
+          </div>
+        )}
       </div>
     </div>
   );
