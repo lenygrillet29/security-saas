@@ -656,6 +656,26 @@ async function init() {
     );
   `);
 
+  // ── 8 taux horaires sur les devis ────────────────────────────────────────────
+  await pool.query(`
+    ALTER TABLE quotes ADD COLUMN IF NOT EXISTS hourly_rate_sunday_night       REAL DEFAULT 0;
+    ALTER TABLE quotes ADD COLUMN IF NOT EXISTS hourly_rate_holiday_day        REAL DEFAULT 0;
+    ALTER TABLE quotes ADD COLUMN IF NOT EXISTS hourly_rate_holiday_night      REAL DEFAULT 0;
+    ALTER TABLE quotes ADD COLUMN IF NOT EXISTS hourly_rate_holiday_sunday_day REAL DEFAULT 0;
+    ALTER TABLE quotes ADD COLUMN IF NOT EXISTS hourly_rate_holiday_sunday_night REAL DEFAULT 0;
+
+    ALTER TABLE quote_lines ADD COLUMN IF NOT EXISTS hours_sunday_night        REAL DEFAULT 0;
+    ALTER TABLE quote_lines ADD COLUMN IF NOT EXISTS rate_sunday_night         REAL DEFAULT 0;
+    ALTER TABLE quote_lines ADD COLUMN IF NOT EXISTS hours_holiday_day         REAL DEFAULT 0;
+    ALTER TABLE quote_lines ADD COLUMN IF NOT EXISTS rate_holiday_day          REAL DEFAULT 0;
+    ALTER TABLE quote_lines ADD COLUMN IF NOT EXISTS hours_holiday_night       REAL DEFAULT 0;
+    ALTER TABLE quote_lines ADD COLUMN IF NOT EXISTS rate_holiday_night        REAL DEFAULT 0;
+    ALTER TABLE quote_lines ADD COLUMN IF NOT EXISTS hours_holiday_sunday_day  REAL DEFAULT 0;
+    ALTER TABLE quote_lines ADD COLUMN IF NOT EXISTS rate_holiday_sunday_day   REAL DEFAULT 0;
+    ALTER TABLE quote_lines ADD COLUMN IF NOT EXISTS hours_holiday_sunday_night REAL DEFAULT 0;
+    ALTER TABLE quote_lines ADD COLUMN IF NOT EXISTS rate_holiday_sunday_night REAL DEFAULT 0;
+  `);
+
   console.log('[DB] PostgreSQL connecté — schéma multi-tenant initialisé');
 }
 

@@ -10,9 +10,24 @@ const QUOTES_QUERY = `
   LEFT JOIN sites s ON q.site_id = s.id
 `;
 
+const RATE_KEYS = [
+  ['hours_day',                 'rate_day'],
+  ['hours_night',               'rate_night'],
+  ['hours_sunday',              'rate_sunday'],
+  ['hours_sunday_night',        'rate_sunday_night'],
+  ['hours_holiday_day',         'rate_holiday_day'],
+  ['hours_holiday_night',       'rate_holiday_night'],
+  ['hours_holiday_sunday_day',  'rate_holiday_sunday_day'],
+  ['hours_holiday_sunday_night','rate_holiday_sunday_night'],
+];
+
 function calcTotal(lines) {
   return lines.reduce((sum, l) =>
-    sum + (l.hours_day * l.rate_day) + (l.hours_night * l.rate_night) + (l.hours_sunday * l.rate_sunday), 0);
+    sum + RATE_KEYS.reduce((s, [h, r]) => s + (l[h] || 0) * (l[r] || 0), 0), 0);
+}
+
+function lineTotal(l) {
+  return RATE_KEYS.reduce((s, [h, r]) => s + (l[h] || 0) * (l[r] || 0), 0);
 }
 
 router.get('/', async (req, res) => {
@@ -39,8 +54,11 @@ router.get('/:id', async (req, res) => {
 router.post('/', requireWriter, async (req, res) => {
   const pgClient = await db.pool.connect();
   try {
-    const { client_id, site_id, title, valid_until, hourly_rate_day, hourly_rate_night,
-      hourly_rate_sunday, status, notes, tva_rate, lines = [] } = req.body;
+    const { client_id, site_id, title, valid_until,
+      hourly_rate_day, hourly_rate_night, hourly_rate_sunday, hourly_rate_sunday_night,
+      hourly_rate_holiday_day, hourly_rate_holiday_night,
+      hourly_rate_holiday_sunday_day, hourly_rate_holiday_sunday_night,
+      status, notes, tva_rate, lines = [] } = req.body;
     if (!client_id || !title) return res.status(400).json({ error: 'client_id et titre requis' });
 
     await pgClient.query('BEGIN');
@@ -55,22 +73,35 @@ router.post('/', requireWriter, async (req, res) => {
 
     const total_ht = calcTotal(lines);
     const qRes = await pgClient.query(
-      `INSERT INTO quotes (company_id, client_id, site_id, quote_number, title, valid_until, hourly_rate_day,
-       hourly_rate_night, hourly_rate_sunday, status, notes, total_ht, tva_rate)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
-      [req.user.companyId, client_id, site_id || null, quote_number, title,
-        valid_until || null, hourly_rate_day || 0, hourly_rate_night || 0,
-        hourly_rate_sunday || 0, status || 'draft', notes || null, total_ht, tva_rate || 20]
+      `INSERT INTO quotes (company_id, client_id, site_id, quote_number, title, valid_until,
+       hourly_rate_day, hourly_rate_night, hourly_rate_sunday, hourly_rate_sunday_night,
+       hourly_rate_holiday_day, hourly_rate_holiday_night,
+       hourly_rate_holiday_sunday_day, hourly_rate_holiday_sunday_night,
+       status, notes, total_ht, tva_rate)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,
+      [req.user.companyId, client_id, site_id || null, quote_number, title, valid_until || null,
+        hourly_rate_day || 0, hourly_rate_night || 0, hourly_rate_sunday || 0, hourly_rate_sunday_night || 0,
+        hourly_rate_holiday_day || 0, hourly_rate_holiday_night || 0,
+        hourly_rate_holiday_sunday_day || 0, hourly_rate_holiday_sunday_night || 0,
+        status || 'draft', notes || null, total_ht, tva_rate || 20]
     );
     const quoteId = qRes.rows[0].id;
 
     for (const l of lines) {
-      const lineTotal = (l.hours_day * l.rate_day) + (l.hours_night * l.rate_night) + (l.hours_sunday * l.rate_sunday);
+      const lt = lineTotal(l);
       await pgClient.query(
-        `INSERT INTO quote_lines (quote_id, description, hours_day, hours_night, hours_sunday, rate_day, rate_night, rate_sunday, total)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [quoteId, l.description, l.hours_day || 0, l.hours_night || 0, l.hours_sunday || 0,
-          l.rate_day || 0, l.rate_night || 0, l.rate_sunday || 0, lineTotal]
+        `INSERT INTO quote_lines (quote_id, description,
+         hours_day, rate_day, hours_night, rate_night, hours_sunday, rate_sunday,
+         hours_sunday_night, rate_sunday_night, hours_holiday_day, rate_holiday_day,
+         hours_holiday_night, rate_holiday_night, hours_holiday_sunday_day, rate_holiday_sunday_day,
+         hours_holiday_sunday_night, rate_holiday_sunday_night, total)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+        [quoteId, l.description,
+          l.hours_day || 0, l.rate_day || 0, l.hours_night || 0, l.rate_night || 0,
+          l.hours_sunday || 0, l.rate_sunday || 0, l.hours_sunday_night || 0, l.rate_sunday_night || 0,
+          l.hours_holiday_day || 0, l.rate_holiday_day || 0, l.hours_holiday_night || 0, l.rate_holiday_night || 0,
+          l.hours_holiday_sunday_day || 0, l.rate_holiday_sunday_day || 0,
+          l.hours_holiday_sunday_night || 0, l.rate_holiday_sunday_night || 0, lt]
       );
     }
 
@@ -93,27 +124,43 @@ router.put('/:id', requireWriter, async (req, res) => {
     const existing = await db.get('SELECT id FROM quotes WHERE id = ? AND company_id = ?', [req.params.id, req.user.companyId]);
     if (!existing) return res.status(404).json({ error: 'Devis non trouvé' });
 
-    const { client_id, site_id, title, valid_until, hourly_rate_day, hourly_rate_night,
-      hourly_rate_sunday, status, notes, tva_rate, lines = [] } = req.body;
+    const { client_id, site_id, title, valid_until,
+      hourly_rate_day, hourly_rate_night, hourly_rate_sunday, hourly_rate_sunday_night,
+      hourly_rate_holiday_day, hourly_rate_holiday_night,
+      hourly_rate_holiday_sunday_day, hourly_rate_holiday_sunday_night,
+      status, notes, tva_rate, lines = [] } = req.body;
 
     await pgClient.query('BEGIN');
     const total_ht = calcTotal(lines);
     await pgClient.query(
-      `UPDATE quotes SET client_id=$1, site_id=$2, title=$3, valid_until=$4, hourly_rate_day=$5,
-       hourly_rate_night=$6, hourly_rate_sunday=$7, status=$8, notes=$9, total_ht=$10, tva_rate=$11 WHERE id=$12`,
+      `UPDATE quotes SET client_id=$1, site_id=$2, title=$3, valid_until=$4,
+       hourly_rate_day=$5, hourly_rate_night=$6, hourly_rate_sunday=$7, hourly_rate_sunday_night=$8,
+       hourly_rate_holiday_day=$9, hourly_rate_holiday_night=$10,
+       hourly_rate_holiday_sunday_day=$11, hourly_rate_holiday_sunday_night=$12,
+       status=$13, notes=$14, total_ht=$15, tva_rate=$16 WHERE id=$17`,
       [client_id, site_id || null, title, valid_until || null,
-        hourly_rate_day || 0, hourly_rate_night || 0, hourly_rate_sunday || 0,
+        hourly_rate_day || 0, hourly_rate_night || 0, hourly_rate_sunday || 0, hourly_rate_sunday_night || 0,
+        hourly_rate_holiday_day || 0, hourly_rate_holiday_night || 0,
+        hourly_rate_holiday_sunday_day || 0, hourly_rate_holiday_sunday_night || 0,
         status || 'draft', notes || null, total_ht, tva_rate || 20, req.params.id]
     );
 
     await pgClient.query('DELETE FROM quote_lines WHERE quote_id = $1', [req.params.id]);
     for (const l of lines) {
-      const lineTotal = (l.hours_day * l.rate_day) + (l.hours_night * l.rate_night) + (l.hours_sunday * l.rate_sunday);
+      const lt = lineTotal(l);
       await pgClient.query(
-        `INSERT INTO quote_lines (quote_id, description, hours_day, hours_night, hours_sunday, rate_day, rate_night, rate_sunday, total)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [req.params.id, l.description, l.hours_day || 0, l.hours_night || 0, l.hours_sunday || 0,
-          l.rate_day || 0, l.rate_night || 0, l.rate_sunday || 0, lineTotal]
+        `INSERT INTO quote_lines (quote_id, description,
+         hours_day, rate_day, hours_night, rate_night, hours_sunday, rate_sunday,
+         hours_sunday_night, rate_sunday_night, hours_holiday_day, rate_holiday_day,
+         hours_holiday_night, rate_holiday_night, hours_holiday_sunday_day, rate_holiday_sunday_day,
+         hours_holiday_sunday_night, rate_holiday_sunday_night, total)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+        [req.params.id, l.description,
+          l.hours_day || 0, l.rate_day || 0, l.hours_night || 0, l.rate_night || 0,
+          l.hours_sunday || 0, l.rate_sunday || 0, l.hours_sunday_night || 0, l.rate_sunday_night || 0,
+          l.hours_holiday_day || 0, l.rate_holiday_day || 0, l.hours_holiday_night || 0, l.rate_holiday_night || 0,
+          l.hours_holiday_sunday_day || 0, l.rate_holiday_sunday_day || 0,
+          l.hours_holiday_sunday_night || 0, l.rate_holiday_sunday_night || 0, lt]
       );
     }
 

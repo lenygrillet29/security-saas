@@ -15,35 +15,38 @@ const STATUSES = [
 ];
 function statusInfo(s) { return STATUSES.find(x => x.value === s) || STATUSES[0]; }
 
+const RATE_COLS = [
+  { h: 'hours_day',                 r: 'rate_day',                 label: 'Jour',         color: 'text-yellow-400' },
+  { h: 'hours_night',               r: 'rate_night',               label: 'Nuit',         color: 'text-violet-400' },
+  { h: 'hours_sunday',              r: 'rate_sunday',              label: 'Dim.Jour',     color: 'text-blue-400' },
+  { h: 'hours_sunday_night',        r: 'rate_sunday_night',        label: 'Dim.Nuit',     color: 'text-indigo-400' },
+  { h: 'hours_holiday_day',         r: 'rate_holiday_day',         label: 'Fér.Jour',     color: 'text-red-400' },
+  { h: 'hours_holiday_night',       r: 'rate_holiday_night',       label: 'Fér.Nuit',     color: 'text-rose-400' },
+  { h: 'hours_holiday_sunday_day',  r: 'rate_holiday_sunday_day',  label: 'Fér.Dim.Jour', color: 'text-orange-400' },
+  { h: 'hours_holiday_sunday_night',r: 'rate_holiday_sunday_night',label: 'Fér.Dim.Nuit', color: 'text-amber-400' },
+];
+
 function LineRow({ line, onChange, onRemove, idx }) {
   const set = (k, v) => onChange(idx, { ...line, [k]: v === '' ? 0 : parseFloat(v) || 0 });
   const setStr = (k, v) => onChange(idx, { ...line, [k]: v });
-  const total = (line.hours_day * line.rate_day) + (line.hours_night * line.rate_night) + (line.hours_sunday * line.rate_sunday);
+  const total = RATE_COLS.reduce((s, { h, r }) => s + (line[h] || 0) * (line[r] || 0), 0);
 
   return (
     <tr className="border-b border-dark-600">
-      <td className="py-2 px-2">
-        <input className="input text-xs" value={line.description} onChange={e => setStr('description', e.target.value)} placeholder="Description de la prestation" />
+      <td className="py-2 px-2 min-w-[160px]">
+        <input className="input text-xs" value={line.description} onChange={e => setStr('description', e.target.value)} placeholder="Description" />
       </td>
-      <td className="py-2 px-1 w-20">
-        <input type="number" step="0.5" className="input text-xs text-right" value={line.hours_day || ''} onChange={e => set('hours_day', e.target.value)} placeholder="0" />
-      </td>
-      <td className="py-2 px-1 w-20">
-        <input type="number" step="0.01" className="input text-xs text-right" value={line.rate_day || ''} onChange={e => set('rate_day', e.target.value)} placeholder="0€" />
-      </td>
-      <td className="py-2 px-1 w-20">
-        <input type="number" step="0.5" className="input text-xs text-right" value={line.hours_night || ''} onChange={e => set('hours_night', e.target.value)} placeholder="0" />
-      </td>
-      <td className="py-2 px-1 w-20">
-        <input type="number" step="0.01" className="input text-xs text-right" value={line.rate_night || ''} onChange={e => set('rate_night', e.target.value)} placeholder="0€" />
-      </td>
-      <td className="py-2 px-1 w-20">
-        <input type="number" step="0.5" className="input text-xs text-right" value={line.hours_sunday || ''} onChange={e => set('hours_sunday', e.target.value)} placeholder="0" />
-      </td>
-      <td className="py-2 px-1 w-20">
-        <input type="number" step="0.01" className="input text-xs text-right" value={line.rate_sunday || ''} onChange={e => set('rate_sunday', e.target.value)} placeholder="0€" />
-      </td>
-      <td className="py-2 px-2 text-right text-sm font-semibold text-white w-24">
+      {RATE_COLS.map(({ h, r }) => (
+        <>
+          <td key={h} className="py-2 px-1 w-16">
+            <input type="number" step="0.5" className="input text-xs text-right px-1" value={line[h] || ''} onChange={e => set(h, e.target.value)} placeholder="0" />
+          </td>
+          <td key={r} className="py-2 px-1 w-16">
+            <input type="number" step="0.01" className="input text-xs text-right px-1" value={line[r] || ''} onChange={e => set(r, e.target.value)} placeholder="0" />
+          </td>
+        </>
+      ))}
+      <td className="py-2 px-2 text-right text-sm font-semibold text-white w-24 whitespace-nowrap">
         {total.toFixed(2)}€
       </td>
       <td className="py-2 px-1 w-8">
@@ -55,21 +58,22 @@ function LineRow({ line, onChange, onRemove, idx }) {
 
 function QuoteForm({ quote, clients, sites, onSave, onClose }) {
   const toast = useToast();
+  const defaultRates = Object.fromEntries(RATE_COLS.map(({ r }) => [r.replace('rate_', 'hourly_rate_'), quote?.[r.replace('rate_', 'hourly_rate_')] || '']));
   const [form, setForm] = useState({
     client_id: quote?.client_id || '',
     site_id: quote?.site_id || '',
     title: quote?.title || '',
     valid_until: quote?.valid_until || '',
-    hourly_rate_day: quote?.hourly_rate_day || '',
-    hourly_rate_night: quote?.hourly_rate_night || '',
-    hourly_rate_sunday: quote?.hourly_rate_sunday || '',
+    ...defaultRates,
     status: quote?.status || 'draft',
     notes: quote?.notes || '',
     tva_rate: quote?.tva_rate || 20,
   });
-  const [lines, setLines] = useState(quote?.lines || [
-    { description: '', hours_day: 0, hours_night: 0, hours_sunday: 0, rate_day: 0, rate_night: 0, rate_sunday: 0 }
+  const emptyLine = Object.fromEntries([
+    ['description', ''],
+    ...RATE_COLS.flatMap(({ h, r }) => [[h, 0], [r, 0]])
   ]);
+  const [lines, setLines] = useState(quote?.lines || [{ ...emptyLine }]);
 
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
   const filteredSites = sites.filter(s => !form.client_id || s.client_id === parseInt(form.client_id));
@@ -81,10 +85,12 @@ function QuoteForm({ quote, clients, sites, onSave, onClose }) {
     setLines(prev => prev.filter((_, i) => i !== idx));
   }
   function addLine() {
-    setLines(prev => [...prev, { description: '', hours_day: 0, hours_night: 0, hours_sunday: 0, rate_day: form.hourly_rate_day || 0, rate_night: form.hourly_rate_night || 0, rate_sunday: form.hourly_rate_sunday || 0 }]);
+    const newLine = { ...emptyLine };
+    RATE_COLS.forEach(({ r }) => { newLine[r] = parseFloat(form[r.replace('rate_', 'hourly_rate_')] || 0); });
+    setLines(prev => [...prev, newLine]);
   }
 
-  const totalHT = lines.reduce((s, l) => s + (l.hours_day * l.rate_day) + (l.hours_night * l.rate_night) + (l.hours_sunday * l.rate_sunday), 0);
+  const totalHT = lines.reduce((s, l) => s + RATE_COLS.reduce((a, { h, r }) => a + (l[h] || 0) * (l[r] || 0), 0), 0);
   const tva = totalHT * (parseFloat(form.tva_rate) / 100);
   const ttc = totalHT + tva;
 
@@ -133,20 +139,17 @@ function QuoteForm({ quote, clients, sites, onSave, onClose }) {
 
       {/* Taux par défaut */}
       <div className="bg-dark-700 rounded-lg p-4">
-        <div className="text-xs font-medium text-slate-400 mb-3">Taux horaires par défaut pour ce devis</div>
-        <div className="grid grid-cols-3 gap-3">
-          <div>
-            <label className="label flex items-center gap-1"><Sun className="w-3 h-3 text-yellow-400"/>Jour (€/h)</label>
-            <input type="number" step="0.01" className="input" value={form.hourly_rate_day} onChange={e => set('hourly_rate_day', e.target.value)} />
-          </div>
-          <div>
-            <label className="label flex items-center gap-1"><Moon className="w-3 h-3 text-violet-400"/>Nuit (€/h)</label>
-            <input type="number" step="0.01" className="input" value={form.hourly_rate_night} onChange={e => set('hourly_rate_night', e.target.value)} />
-          </div>
-          <div>
-            <label className="label">Dimanche (€/h)</label>
-            <input type="number" step="0.01" className="input" value={form.hourly_rate_sunday} onChange={e => set('hourly_rate_sunday', e.target.value)} />
-          </div>
+        <div className="text-xs font-medium text-slate-400 mb-3">Taux horaires par défaut (€/h) — appliqués automatiquement aux nouvelles lignes</div>
+        <div className="grid grid-cols-4 gap-3">
+          {RATE_COLS.map(({ r, label, color }) => {
+            const key = r.replace('rate_', 'hourly_rate_');
+            return (
+              <div key={key}>
+                <label className={`label text-xs ${color}`}>{label}</label>
+                <input type="number" step="0.01" className="input text-sm" value={form[key] || ''} onChange={e => set(key, e.target.value)} placeholder="0.00" />
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -160,14 +163,14 @@ function QuoteForm({ quote, clients, sites, onSave, onClose }) {
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-dark-700 border-b border-dark-600">
-                <th className="text-left py-2 px-2 text-slate-400">Description</th>
-                <th className="text-right py-2 px-1 text-slate-400">H.Jour</th>
-                <th className="text-right py-2 px-1 text-blue-400">Taux</th>
-                <th className="text-right py-2 px-1 text-slate-400">H.Nuit</th>
-                <th className="text-right py-2 px-1 text-violet-400">Taux</th>
-                <th className="text-right py-2 px-1 text-slate-400">H.Dim</th>
-                <th className="text-right py-2 px-1 text-amber-400">Taux</th>
-                <th className="text-right py-2 px-2 text-slate-400">Total HT</th>
+                <th className="text-left py-2 px-2 text-slate-400 min-w-[160px]">Description</th>
+                {RATE_COLS.map(({ label, color }) => (
+                  <>
+                    <th key={label+'h'} className={`text-right py-2 px-1 text-xs ${color} w-16`}>H.</th>
+                    <th key={label+'r'} className={`text-right py-2 px-1 text-xs ${color} w-16`}>{label}</th>
+                  </>
+                ))}
+                <th className="text-right py-2 px-2 text-slate-400 w-24">Total HT</th>
                 <th className="w-8"></th>
               </tr>
             </thead>
